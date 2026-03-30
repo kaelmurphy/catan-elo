@@ -1,32 +1,37 @@
 const K = 32;
 
 /**
- * Calculate ELO changes for a multiplayer game with teams.
+ * Zero-sum pairwise ELO for teams.
+ * Winner gains K*(1-E) against each losing team.
+ * Each loser loses exactly what the winner gains from them.
+ * Teammates split their team's change equally.
+ *
  * @param {Array<{players: Array<{id: string, elo: number}>}>} teams
  * @param {number} winningTeamIndex
  * @returns {Object} { [playerId]: eloChange }
  */
 export function calculateTeamEloChanges(teams, winningTeamIndex) {
-  const teamElos = teams.map(team =>
-    team.players.reduce((sum, p) => sum + p.elo, 0) / team.players.length
-  );
-
   const changes = {};
+  teams.forEach(team => team.players.forEach(p => { changes[p.id] = 0; }));
+
+  const winningTeam = teams[winningTeamIndex];
+  const winningElo =
+    winningTeam.players.reduce((s, p) => s + p.elo, 0) / winningTeam.players.length;
 
   teams.forEach((team, i) => {
-    const opponents = teamElos.filter((_, j) => j !== i);
-    const teamElo = teamElos[i];
+    if (i === winningTeamIndex) return;
 
-    const expected =
-      opponents.reduce((sum, oppElo) => {
-        return sum + 1 / (1 + Math.pow(10, (oppElo - teamElo) / 400));
-      }, 0) / opponents.length;
+    const losingElo =
+      team.players.reduce((s, p) => s + p.elo, 0) / team.players.length;
 
-    const actual = i === winningTeamIndex ? 1 : 0;
-    const teamChange = Math.round(K * (actual - expected));
+    const expected = 1 / (1 + Math.pow(10, (losingElo - winningElo) / 400));
+    const gain = Math.round(K * (1 - expected));
 
-    team.players.forEach(player => {
-      changes[player.id] = Math.round(teamChange / team.players.length);
+    winningTeam.players.forEach(p => {
+      changes[p.id] += Math.round(gain / winningTeam.players.length);
+    });
+    team.players.forEach(p => {
+      changes[p.id] -= Math.round(gain / team.players.length);
     });
   });
 

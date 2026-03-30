@@ -14,16 +14,16 @@ export default function GameHistory({ games, players }) {
 
   if (games.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow p-4">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">Recent Games</h2>
-        <p className="text-gray-400 text-sm text-center py-6">No games recorded yet.</p>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
+        <p className="text-slate-400 text-sm text-center py-6">No games recorded yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow p-4">
-      <h2 className="text-lg font-bold text-gray-800 mb-4">Recent Games</h2>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+      <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
       <ul className="space-y-3">
         {games.map(game => {
           const eloChanges = game.elo_changes;
@@ -50,16 +50,16 @@ export default function GameHistory({ games, players }) {
               }).join(' · ');
 
           return (
-            <li key={game.id} className="text-sm border-b last:border-0 pb-3 last:pb-0">
+            <li key={game.id} className="text-sm border-b border-slate-50 last:border-0 pb-3 last:pb-0">
               <div className="flex justify-between items-start">
-                <span className="font-semibold text-gray-800">
+                <span className="font-semibold text-slate-800">
                   {winnerDisplay} won
                 </span>
-                <span className="text-gray-400 text-xs ml-2 shrink-0">
+                <span className="text-slate-400 text-xs ml-2 shrink-0">
                   {timeAgo(game.created_at)}
                 </span>
               </div>
-              <p className="text-gray-500 mt-0.5">{summary}</p>
+              <p className="text-slate-400 text-xs mt-0.5">{summary}</p>
             </li>
           );
         })}
