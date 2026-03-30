@@ -4,9 +4,8 @@ import { supabase } from '../lib/supabase';
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
 
-export default function RecordGame({ players, modes, onClose, onSubmitted }) {
-  const allSeatOptions = [...new Set(modes.flatMap(m => m.seatOptions))].sort((a, b) => a - b);
-  const [seatCount, setSeatCount] = useState(allSeatOptions[allSeatOptions.length - 1]);
+export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, seatOptions, usePlacement, onClose, onSubmitted }) {
+  const [seatCount, setSeatCount] = useState(seatOptions[seatOptions.length - 1]);
   const [assignments, setAssignments] = useState({});
   // Catan: which team number won
   const [winningTeam, setWinningTeam] = useState(null);
