@@ -1,4 +1,4 @@
-export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddPlayer }) {
+export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddPlayer, renderRecord }) {
   const sorted = [...players].sort((a, b) => b[eloKey] - a[eloKey]);
 
   return (
@@ -36,8 +36,8 @@ export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddP
                   <td className="py-2.5 text-right font-mono font-bold text-blue-600">
                     {player[eloKey]}
                   </td>
-                  <td className="py-2.5 text-right text-slate-400 text-xs">
-                    {wins}–{losses}
+                  <td className="py-2.5 text-right text-slate-400 text-xs whitespace-nowrap">
+                    {renderRecord ? renderRecord(player) : `${wins}–${losses}`}
                   </td>
                 </tr>
               );

@@ -25,6 +25,8 @@ const GAMES = [
             games,
           };
         },
+        renderRecord: p =>
+          `4p: ${p.wins_4p}–${p.games_4p - p.wins_4p}  |  6p: ${p.wins_6p}–${p.games_6p - p.wins_6p}`,
       },
       { id: '4p', label: '3–4 Players', eloKey: 'elo_4p', winsKey: 'wins_4p', gamesKey: 'games_4p', seatOptions: [3, 4] },
       { id: '6p', label: '5–6 Players', eloKey: 'elo_6p', winsKey: 'wins_6p', gamesKey: 'games_6p', seatOptions: [5, 6] },
@@ -48,7 +50,7 @@ const GAMES = [
           games: p.games_ttr,
         }),
       },
-      { id: 'ttr', label: '2–5 Players', eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5] },
+      { id: 'ttr', label: '2–5 Players', eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5], usePlacement: true },
     ],
   },
 ];
@@ -182,6 +184,7 @@ export default function App() {
           winsKey={currentMode.winsKey}
           gamesKey={currentMode.gamesKey}
           onAddPlayer={() => setShowAddPlayer(true)}
+          renderRecord={currentMode.renderRecord}
         />
 
         <GameHistory games={games} players={players} />
@@ -227,6 +230,7 @@ export default function App() {
           winsKey={recordMode.winsKey}
           gamesKey={recordMode.gamesKey}
           seatOptions={recordMode.seatOptions}
+          usePlacement={recordMode.usePlacement ?? false}
           onClose={() => setShowRecordGame(false)}
           onSubmitted={() => fetchGames(currentMode)}
         />

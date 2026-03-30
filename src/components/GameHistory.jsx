@@ -1,3 +1,5 @@
+const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -34,7 +36,18 @@ export default function GameHistory({ games, players }) {
                 .join(' + ')
             : (playerMap[game.winner_id] ?? 'Unknown');
 
-          const summary = game.teams
+          // Placement games (TTR): show results in finishing order
+          const summary = game.ranked_team_indices && game.teams
+            ? game.ranked_team_indices.map((teamIdx, place) => {
+                const names = game.teams[teamIdx]
+                  .map(id => playerMap[id] ?? 'Unknown').join('+');
+                const deltas = game.teams[teamIdx].map(id => {
+                  const d = eloChanges[id];
+                  return `${d >= 0 ? '+' : ''}${d}`;
+                }).join('/');
+                return `${ORDINALS[place] ?? `${place + 1}th`}: ${names} ${deltas}`;
+              }).join(',  ')
+            : game.teams
             ? game.teams.map(teamIds => {
                 const names = teamIds.map(id => playerMap[id] ?? 'Unknown').join('+');
                 const deltas = teamIds.map(id => {
@@ -42,12 +55,12 @@ export default function GameHistory({ games, players }) {
                   return `${d >= 0 ? '+' : ''}${d}`;
                 }).join('/');
                 return `${names} ${deltas}`;
-              }).join(' · ')
+              }).join(',  ')
             : game.player_ids.map(id => {
                 const name = playerMap[id] ?? 'Unknown';
                 const delta = eloChanges[id];
                 return `${name} ${delta >= 0 ? '+' : ''}${delta}`;
-              }).join(' · ');
+              }).join(',  ');
 
           return (
             <li key={game.id} className="text-sm border-b border-slate-50 last:border-0 pb-3 last:pb-0">
