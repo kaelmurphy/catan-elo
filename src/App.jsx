@@ -50,7 +50,7 @@ const GAMES = [
           games: p.games_ttr,
         }),
       },
-      { id: 'ttr', label: '2–5 Players', eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5], usePlacement: true },
+      { id: 'ttr', label: '2–5 Players', hidden: true, eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5], usePlacement: true },
     ],
   },
 ];
@@ -64,24 +64,26 @@ export default function App() {
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [addingPlayer, setAddingPlayer] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [editName, setEditName] = useState('');
 
   const currentGame = GAMES.find(g => g.id === gameId);
   const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
 
-  // For virtual/overall modes, compute and inject the derived ELO keys onto each player
   const displayPlayers = currentMode.virtual
-    ? players.map(p => {
-        const stats = currentMode.computeStats(p);
-        return {
-          ...p,
-          [currentMode.eloKey]: stats.elo,
-          [currentMode.winsKey]: stats.wins,
-          [currentMode.gamesKey]: stats.games,
-        };
-      })
+    ? players
+        .map(p => {
+          const stats = currentMode.computeStats(p);
+          return {
+            ...p,
+            [currentMode.eloKey]: stats.elo,
+            [currentMode.winsKey]: stats.wins,
+            [currentMode.gamesKey]: stats.games,
+          };
+        })
+        .filter(p => p[currentMode.gamesKey] > 0)
     : players;
 
-  // When recording a game while in overall view, use the first real mode
   const recordMode = currentMode.virtual
     ? currentGame.modes.find(m => !m.virtual)
     : currentMode;
@@ -108,7 +110,6 @@ export default function App() {
   }
 
   useEffect(() => { fetchPlayers(); }, []);
-
   useEffect(() => { fetchGames(currentMode); }, [currentMode.id]);
 
   useEffect(() => {
@@ -127,6 +128,21 @@ export default function App() {
     setNewPlayerName('');
     setShowAddPlayer(false);
     setAddingPlayer(false);
+    fetchPlayers();
+  }
+
+  async function handleRenamePlayer() {
+    const name = editName.trim();
+    if (!name || !editingPlayer) return;
+    await supabase.from('players').update({ name }).eq('id', editingPlayer.id);
+    setEditingPlayer(null);
+    fetchPlayers();
+  }
+
+  async function handleDeletePlayer() {
+    if (!editingPlayer) return;
+    await supabase.from('players').delete().eq('id', editingPlayer.id);
+    setEditingPlayer(null);
     fetchPlayers();
   }
 
@@ -162,21 +178,23 @@ export default function App() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex gap-2">
-          {currentGame.modes.map(m => (
-            <button
-              key={m.id}
-              onClick={() => setModeId(m.id)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
-                ${modeId === m.id
-                  ? 'bg-slate-800 text-white'
-                  : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
-                }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        {currentGame.modes.filter(m => !m.hidden).length > 1 && (
+          <div className="flex gap-2">
+            {currentGame.modes.filter(m => !m.hidden).map(m => (
+              <button
+                key={m.id}
+                onClick={() => setModeId(m.id)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
+                  ${modeId === m.id
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
+                  }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <Leaderboard
           players={displayPlayers}
@@ -184,6 +202,7 @@ export default function App() {
           winsKey={currentMode.winsKey}
           gamesKey={currentMode.gamesKey}
           onAddPlayer={() => setShowAddPlayer(true)}
+          onEditPlayer={p => { setEditingPlayer(p); setEditName(p.name); }}
           renderRecord={currentMode.renderRecord}
         />
 
@@ -218,6 +237,43 @@ export default function App() {
                 {addingPlayer ? 'Adding...' : 'Add'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingPlayer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">Edit Player</h2>
+            <input
+              autoFocus
+              type="text"
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleRenamePlayer()}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => setEditingPlayer(null)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenamePlayer}
+                disabled={!editName.trim()}
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 transition text-sm"
+              >
+                Save
+              </button>
+            </div>
+            <button
+              onClick={handleDeletePlayer}
+              className="w-full py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition text-sm"
+            >
+              Delete Player
+            </button>
           </div>
         </div>
       )}

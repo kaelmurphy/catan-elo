@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
 
 function timeAgo(dateStr) {
@@ -12,7 +14,9 @@ function timeAgo(dateStr) {
 }
 
 export default function GameHistory({ games, players }) {
+  const [showAll, setShowAll] = useState(false);
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
+  const displayed = showAll ? games : games.slice(0, 3);
 
   if (games.length === 0) {
     return (
@@ -27,7 +31,7 @@ export default function GameHistory({ games, players }) {
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
       <ul className="space-y-3">
-        {games.map(game => {
+        {displayed.map(game => {
           const eloChanges = game.elo_changes;
 
           const winnerDisplay = game.teams
@@ -36,7 +40,6 @@ export default function GameHistory({ games, players }) {
                 .join(' + ')
             : (playerMap[game.winner_id] ?? 'Unknown');
 
-          // Placement games (TTR): show results in finishing order
           const summary = game.ranked_team_indices && game.teams
             ? game.ranked_team_indices.map((teamIdx, place) => {
                 const names = game.teams[teamIdx]
@@ -77,6 +80,15 @@ export default function GameHistory({ games, players }) {
           );
         })}
       </ul>
+
+      {games.length > 3 && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600 transition py-1"
+        >
+          {showAll ? 'Show less' : `Show all ${games.length} games`}
+        </button>
+      )}
     </div>
   );
 }
