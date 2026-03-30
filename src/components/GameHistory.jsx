@@ -13,7 +13,7 @@ function timeAgo(dateStr) {
   return `${days}d ago`;
 }
 
-function GameList({ games, playerMap }) {
+function GameList({ games, playerMap, onUndo, isFirst }) {
   return (
     <ul className="space-y-3">
       {games.map(game => {
@@ -50,15 +50,25 @@ function GameList({ games, playerMap }) {
               return `${name} ${delta >= 0 ? '+' : ''}${delta}`;
             }).join(',  ');
 
+        const isLatest = isFirst && game.id === games[0].id;
         return (
           <li key={game.id} className="text-sm border-b border-slate-50 last:border-0 pb-3 last:pb-0">
             <div className="flex justify-between items-start">
               <span className="font-semibold text-slate-800">
                 {winnerDisplay} won
               </span>
-              <span className="text-slate-400 text-xs ml-2 shrink-0">
-                {timeAgo(game.created_at)}
-              </span>
+              <div className="flex items-center gap-2 ml-2 shrink-0">
+                <span className="text-slate-400 text-xs">{timeAgo(game.created_at)}</span>
+                {onUndo && isLatest && (
+                  <button
+                    onClick={() => onUndo(game)}
+                    className="text-xs text-red-400 hover:text-red-600 transition"
+                    title="Undo this game"
+                  >
+                    Undo
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-slate-400 text-xs mt-0.5">{summary}</p>
           </li>
@@ -68,7 +78,7 @@ function GameList({ games, playerMap }) {
   );
 }
 
-export default function GameHistory({ games, players }) {
+export default function GameHistory({ games, players, onUndo }) {
   const [showModal, setShowModal] = useState(false);
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
 
@@ -85,7 +95,7 @@ export default function GameHistory({ games, players }) {
     <>
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
         <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
-        <GameList games={games.slice(0, 3)} playerMap={playerMap} />
+        <GameList games={games.slice(0, 3)} playerMap={playerMap} onUndo={onUndo} isFirst={true} />
         {games.length > 3 && (
           <button
             onClick={() => setShowModal(true)}
@@ -109,7 +119,7 @@ export default function GameHistory({ games, players }) {
               </button>
             </div>
             <div className="overflow-y-auto px-6 py-4">
-              <GameList games={games} playerMap={playerMap} />
+              <GameList games={games} playerMap={playerMap} onUndo={onUndo} isFirst={true} />
             </div>
           </div>
         </div>

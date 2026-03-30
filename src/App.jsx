@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './lib/supabase';
 import Leaderboard from './components/Leaderboard';
 import GameHistory from './components/GameHistory';
 import RecordGame from './components/RecordGame';
+import EloChart from './components/EloChart';
+import HeadToHead from './components/HeadToHead';
 
 const GAMES = [
   {
@@ -68,10 +70,13 @@ export default function App() {
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [editName, setEditName] = useState('');
+  const [editError, setEditError] = useState('');
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
   const [adminError, setAdminError] = useState(false);
+  const [allGames, setAllGames] = useState([]);
+  const [eloHistory, setEloHistory] = useState([]);
 
   const currentGame = GAMES.find(g => g.id === gameId);
   const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
@@ -100,7 +105,7 @@ export default function App() {
   }
 
   async function fetchPlayers() {
-    const { data } = await supabase.from('players').select('*').order('created_at');
+    const { data } = await supabase.from('players').select('*').eq('hidden', false).order('created_at');
     if (data) setPlayers(data);
   }
 
@@ -115,8 +120,77 @@ export default function App() {
     if (data) setGames(data);
   }
 
+  async function fetchAllGames(mode) {
+    const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
+    const { data } = await supabase
+      .from('games')
+      .select('*')
+      .in('mode', modesToFetch)
+      .order('created_at', { ascending: false });
+    if (data) setAllGames(data);
+  }
+
+  async function fetchEloHistory(mode) {
+    const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
+    const { data } = await supabase
+      .from('elo_history')
+      .select('*')
+      .in('mode', modesToFetch)
+      .order('created_at', { ascending: true });
+    if (data) setEloHistory(data);
+  }
+
+  async function handleUndoGame(game) {
+    if (!adminUnlocked) return;
+    // Reverse ELO changes
+    for (const playerId of game.player_ids) {
+      const player = players.find(p => p.id === playerId);
+      if (!player) continue;
+      const delta = game.elo_changes[playerId] ?? 0;
+      const mode = game.mode;
+      const eloK = currentGame.modes.find(m => m.id === mode)?.eloKey ?? recordMode.eloKey;
+      const winsK = currentGame.modes.find(m => m.id === mode)?.winsKey ?? recordMode.winsKey;
+      const gamesK = currentGame.modes.find(m => m.id === mode)?.gamesKey ?? recordMode.gamesKey;
+      const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
+      const wasWinner = winnerIds.includes(playerId);
+      await supabase.from('players').update({
+        [eloK]: player[eloK] - delta,
+        [winsK]: wasWinner ? player[winsK] - 1 : player[winsK],
+        [gamesK]: player[gamesK] - 1,
+      }).eq('id', playerId);
+    }
+    await supabase.from('elo_history').delete().eq('game_id', game.id);
+    await supabase.from('games').delete().eq('id', game.id);
+    fetchPlayers();
+    fetchGames(currentMode);
+    fetchAllGames(currentMode);
+    fetchEloHistory(currentMode);
+  }
+
+  const streaks = useMemo(() => {
+    const result = {};
+    for (const player of players) {
+      let streak = 0;
+      for (const game of allGames) {
+        if (!game.player_ids.includes(player.id)) continue;
+        const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
+        if (winnerIds.includes(player.id)) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      result[player.id] = streak;
+    }
+    return result;
+  }, [allGames, players]);
+
   useEffect(() => { fetchPlayers(); }, []);
-  useEffect(() => { fetchGames(currentMode); }, [currentMode.id]);
+  useEffect(() => {
+    fetchGames(currentMode);
+    fetchAllGames(currentMode);
+    fetchEloHistory(currentMode);
+  }, [currentMode.id]);
 
   useEffect(() => {
     const channel = supabase
@@ -125,6 +199,19 @@ export default function App() {
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('games-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games' }, () => {
+        fetchGames(currentMode);
+        fetchAllGames(currentMode);
+        fetchEloHistory(currentMode);
+        fetchPlayers();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [currentMode.id]);
 
   function handleAdminLogin() {
     if (adminInput === ADMIN_PASSWORD) {
@@ -158,8 +245,13 @@ export default function App() {
 
   async function handleDeletePlayer() {
     if (!editingPlayer) return;
-    await supabase.from('players').delete().eq('id', editingPlayer.id);
+    const { error } = await supabase.from('players').update({ hidden: true }).eq('id', editingPlayer.id);
+    if (error) {
+      setEditError('Failed to remove player.');
+      return;
+    }
     setEditingPlayer(null);
+    setEditError('');
     fetchPlayers();
   }
 
@@ -237,11 +329,20 @@ export default function App() {
           winsKey={currentMode.winsKey}
           gamesKey={currentMode.gamesKey}
           onAddPlayer={() => setShowAddPlayer(true)}
-          onEditPlayer={adminUnlocked ? p => { setEditingPlayer(p); setEditName(p.name); } : null}
+          onEditPlayer={adminUnlocked ? p => { setEditingPlayer(p); setEditName(p.name); setEditError(''); } : null}
           renderRecord={currentMode.renderRecord}
+          streaks={streaks}
         />
 
-        <GameHistory games={games} players={players} />
+        <EloChart eloHistory={eloHistory} players={players} />
+
+        <HeadToHead games={allGames} players={displayPlayers} />
+
+        <GameHistory
+          games={games}
+          players={players}
+          onUndo={adminUnlocked ? handleUndoGame : null}
+        />
       </main>
 
       {showAdminLogin && (
@@ -347,6 +448,7 @@ export default function App() {
             >
               Delete Player
             </button>
+            {editError && <p className="text-red-500 text-xs mt-2 text-center">{editError}</p>}
           </div>
         </div>
       )}

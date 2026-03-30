@@ -1,4 +1,4 @@
-export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddPlayer, onEditPlayer, renderRecord }) {
+export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddPlayer, onEditPlayer, renderRecord, streaks }) {
   const sorted = [...players].sort((a, b) => b[eloKey] - a[eloKey]);
 
   return (
@@ -34,7 +34,14 @@ export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddP
               return (
                 <tr key={player.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition">
                   <td className="py-2.5 text-slate-400 text-xs">{i + 1}</td>
-                  <td className="py-2.5 font-medium text-slate-800">{player.name}</td>
+                  <td className="py-2.5 font-medium text-slate-800">
+                    {player.name}
+                    {streaks && streaks[player.id] >= 2 && (
+                      <span className="ml-1.5 text-xs font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                        {streaks[player.id]}W
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2.5 text-right font-mono font-bold text-blue-600">
                     {player[eloKey]}
                   </td>

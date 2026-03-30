@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase';
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
 
-export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, seatOptions, usePlacement, onClose, onSubmitted }) {
-  const [seatCount, setSeatCount] = useState(seatOptions[seatOptions.length - 1]);
+export default function RecordGame({ players, modes, onClose, onSubmitted }) {
+  const allSeatOptions = [...new Set(modes.flatMap(m => m.seatOptions))].sort((a, b) => a - b);
+  const [seatCount, setSeatCount] = useState(allSeatOptions[allSeatOptions.length - 1]);
   const [assignments, setAssignments] = useState({});
   // Catan: which team number won
   const [winningTeam, setWinningTeam] = useState(null);
@@ -97,7 +98,7 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
       }
     }
 
-    const { error: gameErr } = await supabase.from('games').insert({
+    const { data: gameData, error: gameErr } = await supabase.from('games').insert({
       mode,
       winner_id: teams[winningTeamNum - 1].players[0].id,
       player_ids: teams.flatMap(t => t.players.map(p => p.id)),
@@ -105,13 +106,24 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
       teams: teams.map(t => t.players.map(p => p.id)),
       winning_team_index: winningTeamNum - 1,
       ...(rankedTeamIndices && { ranked_team_indices: rankedTeamIndices }),
-    });
+    }).select().single();
 
     if (gameErr) {
       setError('Failed to save game: ' + gameErr.message);
       setSubmitting(false);
       return;
     }
+
+    // Save elo_history entries for each player
+    const historyRows = teams.flatMap(team =>
+      team.players.map(player => ({
+        game_id: gameData.id,
+        player_id: player.id,
+        elo: player[eloKey] + changes[player.id],
+        mode,
+      }))
+    );
+    await supabase.from('elo_history').insert(historyRows);
 
     onSubmitted();
     onClose();
