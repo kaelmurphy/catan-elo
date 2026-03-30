@@ -27,21 +27,33 @@ export default function GameHistory({ games, players }) {
       <ul className="space-y-3">
         {games.map(game => {
           const eloChanges = game.elo_changes;
-          const playerIds = game.player_ids;
-          const summary = playerIds
-            .map(id => {
-              const name = playerMap[id] ?? 'Unknown';
-              const delta = eloChanges[id];
-              const sign = delta >= 0 ? '+' : '';
-              return `${name} ${sign}${delta}`;
-            })
-            .join(' · ');
+
+          const winnerDisplay = game.teams
+            ? game.teams[game.winning_team_index]
+                .map(id => playerMap[id] ?? 'Unknown')
+                .join(' + ')
+            : (playerMap[game.winner_id] ?? 'Unknown');
+
+          const summary = game.teams
+            ? game.teams.map(teamIds => {
+                const names = teamIds.map(id => playerMap[id] ?? 'Unknown').join('+');
+                const deltas = teamIds.map(id => {
+                  const d = eloChanges[id];
+                  return `${d >= 0 ? '+' : ''}${d}`;
+                }).join('/');
+                return `${names} ${deltas}`;
+              }).join(' · ')
+            : game.player_ids.map(id => {
+                const name = playerMap[id] ?? 'Unknown';
+                const delta = eloChanges[id];
+                return `${name} ${delta >= 0 ? '+' : ''}${delta}`;
+              }).join(' · ');
 
           return (
             <li key={game.id} className="text-sm border-b last:border-0 pb-3 last:pb-0">
               <div className="flex justify-between items-start">
                 <span className="font-semibold text-gray-800">
-                  {playerMap[game.winner_id] ?? 'Unknown'} won
+                  {winnerDisplay} won
                 </span>
                 <span className="text-gray-400 text-xs ml-2 shrink-0">
                   {timeAgo(game.created_at)}
