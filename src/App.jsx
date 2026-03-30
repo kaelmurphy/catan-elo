@@ -9,6 +9,23 @@ const GAMES = [
     id: 'catan',
     label: 'Catan',
     modes: [
+      {
+        id: 'catan_overall',
+        label: 'Overall',
+        virtual: true,
+        fetchModes: ['4p', '6p'],
+        eloKey: 'elo_catan_overall',
+        winsKey: 'wins_catan_overall',
+        gamesKey: 'games_catan_overall',
+        computeStats: p => {
+          const games = p.games_4p + p.games_6p;
+          return {
+            elo: games === 0 ? 1200 : Math.round((p.elo_4p * p.games_4p + p.elo_6p * p.games_6p) / games),
+            wins: p.wins_4p + p.wins_6p,
+            games,
+          };
+        },
+      },
       { id: '4p', label: '3–4 Players', eloKey: 'elo_4p', winsKey: 'wins_4p', gamesKey: 'games_4p', seatOptions: [3, 4] },
       { id: '6p', label: '5–6 Players', eloKey: 'elo_6p', winsKey: 'wins_6p', gamesKey: 'games_6p', seatOptions: [5, 6] },
     ],
@@ -17,6 +34,20 @@ const GAMES = [
     id: 'ttr',
     label: 'Ticket to Ride',
     modes: [
+      {
+        id: 'ttr_overall',
+        label: 'Overall',
+        virtual: true,
+        fetchModes: ['ttr'],
+        eloKey: 'elo_ttr_overall',
+        winsKey: 'wins_ttr_overall',
+        gamesKey: 'games_ttr_overall',
+        computeStats: p => ({
+          elo: p.elo_ttr,
+          wins: p.wins_ttr,
+          games: p.games_ttr,
+        }),
+      },
       { id: 'ttr', label: '2–5 Players', eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5] },
     ],
   },
@@ -24,7 +55,7 @@ const GAMES = [
 
 export default function App() {
   const [gameId, setGameId] = useState('catan');
-  const [modeId, setModeId] = useState('4p');
+  const [modeId, setModeId] = useState('catan_overall');
   const [players, setPlayers] = useState([]);
   const [games, setGames] = useState([]);
   const [showRecordGame, setShowRecordGame] = useState(false);
@@ -34,6 +65,24 @@ export default function App() {
 
   const currentGame = GAMES.find(g => g.id === gameId);
   const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
+
+  // For virtual/overall modes, compute and inject the derived ELO keys onto each player
+  const displayPlayers = currentMode.virtual
+    ? players.map(p => {
+        const stats = currentMode.computeStats(p);
+        return {
+          ...p,
+          [currentMode.eloKey]: stats.elo,
+          [currentMode.winsKey]: stats.wins,
+          [currentMode.gamesKey]: stats.games,
+        };
+      })
+    : players;
+
+  // When recording a game while in overall view, use the first real mode
+  const recordMode = currentMode.virtual
+    ? currentGame.modes.find(m => !m.virtual)
+    : currentMode;
 
   function selectGame(id) {
     setGameId(id);
@@ -46,10 +95,11 @@ export default function App() {
   }
 
   async function fetchGames(mode) {
+    const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
     const { data } = await supabase
       .from('games')
       .select('*')
-      .eq('mode', mode)
+      .in('mode', modesToFetch)
       .order('created_at', { ascending: false })
       .limit(20);
     if (data) setGames(data);
@@ -57,7 +107,7 @@ export default function App() {
 
   useEffect(() => { fetchPlayers(); }, []);
 
-  useEffect(() => { fetchGames(currentMode.id); }, [currentMode.id]);
+  useEffect(() => { fetchGames(currentMode); }, [currentMode.id]);
 
   useEffect(() => {
     const channel = supabase
@@ -110,26 +160,24 @@ export default function App() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {currentGame.modes.length > 1 && (
-          <div className="flex gap-2">
-            {currentGame.modes.map(m => (
-              <button
-                key={m.id}
-                onClick={() => setModeId(m.id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
-                  ${modeId === m.id
-                    ? 'bg-slate-800 text-white'
-                    : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
-                  }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-2">
+          {currentGame.modes.map(m => (
+            <button
+              key={m.id}
+              onClick={() => setModeId(m.id)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
+                ${modeId === m.id
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
+                }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
 
         <Leaderboard
-          players={players}
+          players={displayPlayers}
           eloKey={currentMode.eloKey}
           winsKey={currentMode.winsKey}
           gamesKey={currentMode.gamesKey}
@@ -174,13 +222,13 @@ export default function App() {
       {showRecordGame && (
         <RecordGame
           players={players}
-          mode={currentMode.id}
-          eloKey={currentMode.eloKey}
-          winsKey={currentMode.winsKey}
-          gamesKey={currentMode.gamesKey}
-          seatOptions={currentMode.seatOptions}
+          mode={recordMode.id}
+          eloKey={recordMode.eloKey}
+          winsKey={recordMode.winsKey}
+          gamesKey={recordMode.gamesKey}
+          seatOptions={recordMode.seatOptions}
           onClose={() => setShowRecordGame(false)}
-          onSubmitted={() => fetchGames(currentMode.id)}
+          onSubmitted={() => fetchGames(currentMode)}
         />
       )}
     </div>
