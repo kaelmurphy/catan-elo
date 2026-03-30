@@ -260,7 +260,7 @@ export default function App() {
       <header className="bg-slate-900">
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center justify-between pt-5 pb-3">
-            <h1 className="text-lg font-bold text-white tracking-tight">ELO Tracker</h1>
+            <h1 className="text-lg font-bold text-white tracking-tight">Hickory Boardgame Leaderboards</h1>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowRecordGame(true)}
