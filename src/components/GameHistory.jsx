@@ -1,0 +1,57 @@
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+export default function GameHistory({ games, players }) {
+  const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
+
+  if (games.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl shadow p-4">
+        <h2 className="text-lg font-bold text-gray-800 mb-4">Recent Games</h2>
+        <p className="text-gray-400 text-sm text-center py-6">No games recorded yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow p-4">
+      <h2 className="text-lg font-bold text-gray-800 mb-4">Recent Games</h2>
+      <ul className="space-y-3">
+        {games.map(game => {
+          const eloChanges = game.elo_changes;
+          const playerIds = game.player_ids;
+          const summary = playerIds
+            .map(id => {
+              const name = playerMap[id] ?? 'Unknown';
+              const delta = eloChanges[id];
+              const sign = delta >= 0 ? '+' : '';
+              return `${name} ${sign}${delta}`;
+            })
+            .join(' · ');
+
+          return (
+            <li key={game.id} className="text-sm border-b last:border-0 pb-3 last:pb-0">
+              <div className="flex justify-between items-start">
+                <span className="font-semibold text-gray-800">
+                  {playerMap[game.winner_id] ?? 'Unknown'} won
+                </span>
+                <span className="text-gray-400 text-xs ml-2 shrink-0">
+                  {timeAgo(game.created_at)}
+                </span>
+              </div>
+              <p className="text-gray-500 mt-0.5">{summary}</p>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
