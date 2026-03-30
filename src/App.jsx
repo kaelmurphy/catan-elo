@@ -55,6 +55,8 @@ const GAMES = [
   },
 ];
 
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+
 export default function App() {
   const [gameId, setGameId] = useState('catan');
   const [modeId, setModeId] = useState('catan_overall');
@@ -66,6 +68,10 @@ export default function App() {
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [editName, setEditName] = useState('');
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminInput, setAdminInput] = useState('');
+  const [adminError, setAdminError] = useState(false);
 
   const currentGame = GAMES.find(g => g.id === gameId);
   const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
@@ -120,6 +126,17 @@ export default function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  function handleAdminLogin() {
+    if (adminInput === ADMIN_PASSWORD) {
+      setAdminUnlocked(true);
+      setShowAdminLogin(false);
+      setAdminInput('');
+      setAdminError(false);
+    } else {
+      setAdminError(true);
+    }
+  }
+
   async function handleAddPlayer() {
     const name = newPlayerName.trim();
     if (!name) return;
@@ -152,12 +169,30 @@ export default function App() {
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center justify-between pt-5 pb-3">
             <h1 className="text-lg font-bold text-white tracking-tight">ELO Tracker</h1>
-            <button
-              onClick={() => setShowRecordGame(true)}
-              className="px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition"
-            >
-              + Record Game
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowRecordGame(true)}
+                className="px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition"
+              >
+                + Record Game
+              </button>
+              {adminUnlocked ? (
+                <button
+                  onClick={() => setAdminUnlocked(false)}
+                  className="text-xs text-green-400 hover:text-green-300 transition font-medium"
+                  title="Click to lock"
+                >
+                  Admin
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowAdminLogin(true)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition"
+                >
+                  Admin
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex gap-1">
             {GAMES.map(g => (
@@ -202,12 +237,50 @@ export default function App() {
           winsKey={currentMode.winsKey}
           gamesKey={currentMode.gamesKey}
           onAddPlayer={() => setShowAddPlayer(true)}
-          onEditPlayer={p => { setEditingPlayer(p); setEditName(p.name); }}
+          onEditPlayer={adminUnlocked ? p => { setEditingPlayer(p); setEditName(p.name); } : null}
           renderRecord={currentMode.renderRecord}
         />
 
         <GameHistory games={games} players={players} />
       </main>
+
+      {showAdminLogin && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h2 className="text-lg font-bold text-slate-800 mb-1">Admin</h2>
+            <p className="text-sm text-slate-400 mb-4">Enter your password to unlock admin controls.</p>
+            <input
+              autoFocus
+              type="password"
+              placeholder="Password"
+              value={adminInput}
+              onChange={e => { setAdminInput(e.target.value); setAdminError(false); }}
+              onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
+              className={`w-full border rounded-lg px-3 py-2 text-sm mb-1 focus:outline-none focus:ring-1 transition
+                ${adminError
+                  ? 'border-red-400 focus:border-red-400 focus:ring-red-400'
+                  : 'border-slate-200 focus:border-blue-400 focus:ring-blue-400'
+                }`}
+            />
+            {adminError && <p className="text-red-500 text-xs mb-3">Incorrect password.</p>}
+            {!adminError && <div className="mb-3" />}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowAdminLogin(false); setAdminInput(''); setAdminError(false); }}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdminLogin}
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 transition text-sm"
+              >
+                Unlock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddPlayer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

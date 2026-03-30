@@ -13,10 +13,64 @@ function timeAgo(dateStr) {
   return `${days}d ago`;
 }
 
+function GameList({ games, playerMap }) {
+  return (
+    <ul className="space-y-3">
+      {games.map(game => {
+        const eloChanges = game.elo_changes;
+
+        const winnerDisplay = game.teams
+          ? game.teams[game.winning_team_index]
+              .map(id => playerMap[id] ?? 'Unknown')
+              .join(' + ')
+          : (playerMap[game.winner_id] ?? 'Unknown');
+
+        const summary = game.ranked_team_indices && game.teams
+          ? game.ranked_team_indices.map((teamIdx, place) => {
+              const names = game.teams[teamIdx]
+                .map(id => playerMap[id] ?? 'Unknown').join('+');
+              const deltas = game.teams[teamIdx].map(id => {
+                const d = eloChanges[id];
+                return `${d >= 0 ? '+' : ''}${d}`;
+              }).join('/');
+              return `${ORDINALS[place] ?? `${place + 1}th`}: ${names} ${deltas}`;
+            }).join(',  ')
+          : game.teams
+          ? game.teams.map(teamIds => {
+              const names = teamIds.map(id => playerMap[id] ?? 'Unknown').join('+');
+              const deltas = teamIds.map(id => {
+                const d = eloChanges[id];
+                return `${d >= 0 ? '+' : ''}${d}`;
+              }).join('/');
+              return `${names} ${deltas}`;
+            }).join(',  ')
+          : game.player_ids.map(id => {
+              const name = playerMap[id] ?? 'Unknown';
+              const delta = eloChanges[id];
+              return `${name} ${delta >= 0 ? '+' : ''}${delta}`;
+            }).join(',  ');
+
+        return (
+          <li key={game.id} className="text-sm border-b border-slate-50 last:border-0 pb-3 last:pb-0">
+            <div className="flex justify-between items-start">
+              <span className="font-semibold text-slate-800">
+                {winnerDisplay} won
+              </span>
+              <span className="text-slate-400 text-xs ml-2 shrink-0">
+                {timeAgo(game.created_at)}
+              </span>
+            </div>
+            <p className="text-slate-400 text-xs mt-0.5">{summary}</p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function GameHistory({ games, players }) {
-  const [showAll, setShowAll] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
-  const displayed = showAll ? games : games.slice(0, 3);
 
   if (games.length === 0) {
     return (
@@ -28,67 +82,38 @@ export default function GameHistory({ games, players }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
-      <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
-      <ul className="space-y-3">
-        {displayed.map(game => {
-          const eloChanges = game.elo_changes;
+    <>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <h2 className="text-base font-bold text-slate-800 mb-4">Recent Games</h2>
+        <GameList games={games.slice(0, 3)} playerMap={playerMap} />
+        {games.length > 3 && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600 transition py-1"
+          >
+            Show all {games.length} games
+          </button>
+        )}
+      </div>
 
-          const winnerDisplay = game.teams
-            ? game.teams[game.winning_team_index]
-                .map(id => playerMap[id] ?? 'Unknown')
-                .join(' + ')
-            : (playerMap[game.winner_id] ?? 'Unknown');
-
-          const summary = game.ranked_team_indices && game.teams
-            ? game.ranked_team_indices.map((teamIdx, place) => {
-                const names = game.teams[teamIdx]
-                  .map(id => playerMap[id] ?? 'Unknown').join('+');
-                const deltas = game.teams[teamIdx].map(id => {
-                  const d = eloChanges[id];
-                  return `${d >= 0 ? '+' : ''}${d}`;
-                }).join('/');
-                return `${ORDINALS[place] ?? `${place + 1}th`}: ${names} ${deltas}`;
-              }).join(',  ')
-            : game.teams
-            ? game.teams.map(teamIds => {
-                const names = teamIds.map(id => playerMap[id] ?? 'Unknown').join('+');
-                const deltas = teamIds.map(id => {
-                  const d = eloChanges[id];
-                  return `${d >= 0 ? '+' : ''}${d}`;
-                }).join('/');
-                return `${names} ${deltas}`;
-              }).join(',  ')
-            : game.player_ids.map(id => {
-                const name = playerMap[id] ?? 'Unknown';
-                const delta = eloChanges[id];
-                return `${name} ${delta >= 0 ? '+' : ''}${delta}`;
-              }).join(',  ');
-
-          return (
-            <li key={game.id} className="text-sm border-b border-slate-50 last:border-0 pb-3 last:pb-0">
-              <div className="flex justify-between items-start">
-                <span className="font-semibold text-slate-800">
-                  {winnerDisplay} won
-                </span>
-                <span className="text-slate-400 text-xs ml-2 shrink-0">
-                  {timeAgo(game.created_at)}
-                </span>
-              </div>
-              <p className="text-slate-400 text-xs mt-0.5">{summary}</p>
-            </li>
-          );
-        })}
-      </ul>
-
-      {games.length > 3 && (
-        <button
-          onClick={() => setShowAll(prev => !prev)}
-          className="mt-3 w-full text-xs text-slate-400 hover:text-slate-600 transition py-1"
-        >
-          {showAll ? 'Show less' : `Show all ${games.length} games`}
-        </button>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+              <h2 className="text-base font-bold text-slate-800">All Games</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="overflow-y-auto px-6 py-4">
+              <GameList games={games} playerMap={playerMap} />
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 }

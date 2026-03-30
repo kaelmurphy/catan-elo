@@ -5,12 +5,14 @@ export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddP
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-slate-800">Leaderboard</h2>
-        <button
-          onClick={onAddPlayer}
-          className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
-        >
-          + Add Player
-        </button>
+        {onAddPlayer && (
+          <button
+            onClick={onAddPlayer}
+            className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
+          >
+            + Add Player
+          </button>
+        )}
       </div>
 
       {sorted.length === 0 ? (
@@ -39,14 +41,16 @@ export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddP
                   <td className="py-2.5 text-right text-slate-400 text-xs whitespace-nowrap">
                     {renderRecord ? renderRecord(player) : `${wins}–${losses}`}
                   </td>
-                  <td className="py-2.5 pl-2">
-                    <button
-                      onClick={() => onEditPlayer(player)}
-                      className="text-slate-300 hover:text-slate-500 transition text-xs px-1"
-                    >
-                      ✎
-                    </button>
-                  </td>
+                  {onEditPlayer && (
+                    <td className="py-2.5 pl-2">
+                      <button
+                        onClick={() => onEditPlayer(player)}
+                        className="text-slate-300 hover:text-slate-500 transition text-xs px-1"
+                      >
+                        ✎
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
