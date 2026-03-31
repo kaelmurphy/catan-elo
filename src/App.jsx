@@ -100,30 +100,32 @@ export default function App() {
     setAdminUnlocked(false);
   }
 
-  const currentGame = GAMES.find(g => g.id === gameId);
-  const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
+  const currentGame = gameId === 'players' ? null : GAMES.find(g => g.id === gameId);
+  const currentMode = currentGame ? (currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0]) : null;
 
-  const displayPlayers = currentMode.virtual
-    ? players
-        .map(p => {
-          const stats = currentMode.computeStats(p);
-          return {
-            ...p,
-            [currentMode.eloKey]: stats.elo,
-            [currentMode.winsKey]: stats.wins,
-            [currentMode.gamesKey]: stats.games,
-          };
-        })
-        .filter(p => p[currentMode.gamesKey] > 0)
+  const displayPlayers = currentMode
+    ? (currentMode.virtual
+        ? players
+            .map(p => {
+              const stats = currentMode.computeStats(p);
+              return {
+                ...p,
+                [currentMode.eloKey]: stats.elo,
+                [currentMode.winsKey]: stats.wins,
+                [currentMode.gamesKey]: stats.games,
+              };
+            })
+            .filter(p => p[currentMode.gamesKey] > 0)
+        : players.filter(p => p[currentMode.gamesKey] > 0))
     : players;
 
-  const recordMode = currentMode.virtual
-    ? currentGame.modes.find(m => !m.virtual)
-    : currentMode;
+  const recordMode = currentMode
+    ? (currentMode.virtual ? currentGame.modes.find(m => !m.virtual) : currentMode)
+    : null;
 
   function selectGame(id) {
     setGameId(id);
-    setModeId(GAMES.find(g => g.id === id).modes[0].id);
+    if (id !== 'players') setModeId(GAMES.find(g => g.id === id).modes[0].id);
   }
 
   async function fetchPlayers() {
@@ -343,7 +345,7 @@ export default function App() {
             </div>
           </div>
           <div className="flex gap-1">
-            {GAMES.map(g => (
+            {[...GAMES, { id: 'players', label: 'Roster' }].map(g => (
               <button
                 key={g.id}
                 onClick={() => selectGame(g.id)}
@@ -361,44 +363,78 @@ export default function App() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-        {currentGame.modes.filter(m => !m.hidden).length > 1 && (
-          <div className="flex gap-2">
-            {currentGame.modes.filter(m => !m.hidden).map(m => (
+        {gameId === 'players' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-slate-800">Roster</h2>
               <button
-                key={m.id}
-                onClick={() => setModeId(m.id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
-                  ${modeId === m.id
-                    ? 'bg-slate-800 text-white'
-                    : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
-                  }`}
+                onClick={() => setShowAddPlayer(true)}
+                className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
               >
-                {m.label}
+                + Add Player
               </button>
-            ))}
+            </div>
+            {players.length === 0 ? (
+              <p className="text-slate-400 text-sm text-center py-6">No players yet.</p>
+            ) : (
+              <ul className="divide-y divide-slate-50">
+                {players.map(p => (
+                  <li key={p.id} className="flex items-center justify-between py-2.5">
+                    <span className="text-sm font-medium text-slate-800">{p.name}</span>
+                    {adminUnlocked && (
+                      <button
+                        onClick={() => { setEditingPlayer(p); setEditName(p.name); setEditError(''); }}
+                        className="text-slate-300 hover:text-slate-500 transition text-xs px-1"
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        ) : (
+          <>
+            {currentGame.modes.filter(m => !m.hidden).length > 1 && (
+              <div className="flex gap-2">
+                {currentGame.modes.filter(m => !m.hidden).map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setModeId(m.id)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
+                      ${modeId === m.id
+                        ? 'bg-slate-800 text-white'
+                        : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
+                      }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Leaderboard
+              players={displayPlayers}
+              eloKey={currentMode.eloKey}
+              winsKey={currentMode.winsKey}
+              gamesKey={currentMode.gamesKey}
+              onEditPlayer={adminUnlocked ? p => { setEditingPlayer(p); setEditName(p.name); setEditError(''); } : null}
+              renderRecord={currentMode.renderRecord}
+              streaks={streaks}
+            />
+
+            <EloChart eloHistory={eloHistory} players={players} />
+
+            <HeadToHead games={allGames} players={displayPlayers} />
+
+            <GameHistory
+              games={games}
+              players={players}
+              onUndo={adminUnlocked ? handleUndoGame : null}
+            />
+          </>
         )}
-
-        <Leaderboard
-          players={displayPlayers}
-          eloKey={currentMode.eloKey}
-          winsKey={currentMode.winsKey}
-          gamesKey={currentMode.gamesKey}
-          onAddPlayer={() => setShowAddPlayer(true)}
-          onEditPlayer={adminUnlocked ? p => { setEditingPlayer(p); setEditName(p.name); setEditError(''); } : null}
-          renderRecord={currentMode.renderRecord}
-          streaks={streaks}
-        />
-
-        <EloChart eloHistory={eloHistory} players={players} />
-
-        <HeadToHead games={allGames} players={displayPlayers} />
-
-        <GameHistory
-          games={games}
-          players={players}
-          onUndo={adminUnlocked ? handleUndoGame : null}
-        />
       </main>
 
       {showAdminLogin && (
