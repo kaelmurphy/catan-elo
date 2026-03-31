@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
 
-export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, seatOptions, usePlacement, onClose, onSubmitted }) {
+export default function RecordGame({ players, modeResolver, seatOptions, usePlacement, onClose, onSubmitted }) {
   const [seatCount, setSeatCount] = useState(seatOptions[seatOptions.length - 1]);
   const [assignments, setAssignments] = useState({});
   // Catan: which team number won
@@ -13,6 +13,8 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
   const [rankedTeamNums, setRankedTeamNums] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const { mode, eloKey, winsKey, gamesKey } = modeResolver(seatCount);
 
   function changeSeatCount(n) {
     setSeatCount(n);

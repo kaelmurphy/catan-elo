@@ -10,6 +10,8 @@ const GAMES = [
   {
     id: 'catan',
     label: 'Catan',
+    recordSeatOptions: [3, 4, 5, 6],
+    getModeForSeat: (seatCount, modes) => seatCount <= 4 ? modes.find(m => m.id === '4p') : modes.find(m => m.id === '6p'),
     modes: [
       {
         id: 'catan_overall',
@@ -456,11 +458,14 @@ export default function App() {
       {showRecordGame && (
         <RecordGame
           players={players}
-          mode={recordMode.id}
-          eloKey={recordMode.eloKey}
-          winsKey={recordMode.winsKey}
-          gamesKey={recordMode.gamesKey}
-          seatOptions={recordMode.seatOptions}
+          modeResolver={currentGame.getModeForSeat
+            ? seatCount => {
+                const m = currentGame.getModeForSeat(seatCount, currentGame.modes);
+                return { mode: m.id, eloKey: m.eloKey, winsKey: m.winsKey, gamesKey: m.gamesKey };
+              }
+            : () => ({ mode: recordMode.id, eloKey: recordMode.eloKey, winsKey: recordMode.winsKey, gamesKey: recordMode.gamesKey })
+          }
+          seatOptions={currentGame.recordSeatOptions ?? recordMode.seatOptions}
           usePlacement={recordMode.usePlacement ?? false}
           onClose={() => setShowRecordGame(false)}
           onSubmitted={() => fetchGames(currentMode)}
