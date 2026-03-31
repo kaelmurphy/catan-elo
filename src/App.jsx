@@ -137,6 +137,7 @@ export default function App() {
       .from('games')
       .select('*')
       .in('mode', modesToFetch)
+      .eq('house', house)
       .order('created_at', { ascending: false })
       .limit(20);
     if (data) setGames(data);
@@ -148,6 +149,7 @@ export default function App() {
       .from('games')
       .select('*')
       .in('mode', modesToFetch)
+      .eq('house', house)
       .order('created_at', { ascending: false });
     if (data) setAllGames(data);
   }
@@ -510,6 +512,7 @@ export default function App() {
       {showRecordGame && (
         <RecordGame
           players={players}
+          house={house}
           modeResolver={currentGame.getModeForSeat
             ? seatCount => {
                 const m = currentGame.getModeForSeat(seatCount, currentGame.modes);
