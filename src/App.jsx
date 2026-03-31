@@ -61,7 +61,13 @@ const GAMES = [
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
 
+const HOUSES = [
+  { id: 'hickory', label: 'Hickory' },
+  { id: 'hillside', label: 'Hillside' },
+];
+
 export default function App() {
+  const [house, setHouse] = useState(() => localStorage.getItem('house') ?? null);
   const [gameId, setGameId] = useState('catan');
   const [modeId, setModeId] = useState('catan_overall');
   const [players, setPlayers] = useState([]);
@@ -79,6 +85,20 @@ export default function App() {
   const [adminError, setAdminError] = useState(false);
   const [allGames, setAllGames] = useState([]);
   const [eloHistory, setEloHistory] = useState([]);
+
+  function selectHouse(id) {
+    if (id) {
+      localStorage.setItem('house', id);
+    } else {
+      localStorage.removeItem('house');
+    }
+    setHouse(id);
+    setPlayers([]);
+    setGames([]);
+    setAllGames([]);
+    setEloHistory([]);
+    setAdminUnlocked(false);
+  }
 
   const currentGame = GAMES.find(g => g.id === gameId);
   const currentMode = currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0];
@@ -107,7 +127,7 @@ export default function App() {
   }
 
   async function fetchPlayers() {
-    const { data } = await supabase.from('players').select('*').eq('hidden', false).order('created_at');
+    const { data } = await supabase.from('players').select('*').eq('hidden', false).eq('house', house).order('created_at');
     if (data) setPlayers(data);
   }
 
@@ -187,12 +207,14 @@ export default function App() {
     return result;
   }, [allGames, players]);
 
-  useEffect(() => { fetchPlayers(); }, []);
+  useEffect(() => { if (house) fetchPlayers(); }, [house]);
   useEffect(() => {
-    fetchGames(currentMode);
-    fetchAllGames(currentMode);
-    fetchEloHistory(currentMode);
-  }, [currentMode.id]);
+    if (house) {
+      fetchGames(currentMode);
+      fetchAllGames(currentMode);
+      fetchEloHistory(currentMode);
+    }
+  }, [currentMode.id, house]);
 
   useEffect(() => {
     const channel = supabase
@@ -230,7 +252,7 @@ export default function App() {
     const name = newPlayerName.trim();
     if (!name) return;
     setAddingPlayer(true);
-    await supabase.from('players').insert({ name });
+    await supabase.from('players').insert({ name, house });
     setNewPlayerName('');
     setShowAddPlayer(false);
     setAddingPlayer(false);
@@ -257,12 +279,42 @@ export default function App() {
     fetchPlayers();
   }
 
+  if (!house) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Boardgame Leaderboards</h1>
+          <p className="text-slate-400 mb-8 text-sm">Which house are you at?</p>
+          <div className="flex gap-4 justify-center">
+            {HOUSES.map(h => (
+              <button
+                key={h.id}
+                onClick={() => selectHouse(h.id)}
+                className="px-8 py-4 bg-blue-600 text-white text-lg font-bold rounded-2xl hover:bg-blue-500 transition shadow-lg"
+              >
+                {h.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const houseLabel = HOUSES.find(h => h.id === house)?.label ?? house;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="bg-slate-900">
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center justify-between pt-5 pb-3">
-            <h1 className="text-lg font-bold text-white tracking-tight">Hickory Boardgame Leaderboards</h1>
+            <button
+              onClick={() => selectHouse(null)}
+              className="text-lg font-bold text-white tracking-tight hover:text-slate-300 transition text-left"
+              title="Switch house"
+            >
+              {houseLabel} Leaderboards
+            </button>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowRecordGame(true)}
