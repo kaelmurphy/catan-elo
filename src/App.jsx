@@ -5,6 +5,7 @@ import GameHistory from './components/GameHistory';
 import RecordGame from './components/RecordGame';
 import EloChart from './components/EloChart';
 import HeadToHead from './components/HeadToHead';
+import PlayerProfile from './components/PlayerProfile';
 
 const GAMES = [
   {
@@ -85,6 +86,7 @@ export default function App() {
   const [adminError, setAdminError] = useState(false);
   const [allGames, setAllGames] = useState([]);
   const [eloHistory, setEloHistory] = useState([]);
+  const [profilePlayer, setProfilePlayer] = useState(null);
 
   function selectHouse(id) {
     if (id) {
@@ -119,9 +121,11 @@ export default function App() {
         : players.filter(p => p[currentMode.gamesKey] > 0))
     : players;
 
-  const recordMode = currentMode
-    ? (currentMode.virtual ? currentGame.modes.find(m => !m.virtual) : currentMode)
-    : null;
+  const recordGame = currentGame ?? GAMES[0];
+  const recordMode = (() => {
+    if (!currentMode) return recordGame.modes.find(m => !m.virtual) ?? recordGame.modes[0];
+    return currentMode.virtual ? currentGame.modes.find(m => !m.virtual) : currentMode;
+  })();
 
   function selectGame(id) {
     setGameId(id);
@@ -382,7 +386,12 @@ export default function App() {
               <ul className="divide-y divide-slate-50">
                 {players.map(p => (
                   <li key={p.id} className="flex items-center justify-between py-2.5">
-                    <span className="text-sm font-medium text-slate-800">{p.name}</span>
+                    <button
+                      onClick={() => setProfilePlayer(p)}
+                      className="text-sm font-medium text-slate-800 hover:text-blue-600 transition text-left"
+                    >
+                      {p.name}
+                    </button>
                     {adminUnlocked && (
                       <button
                         onClick={() => { setEditingPlayer(p); setEditName(p.name); setEditError(''); }}
@@ -551,17 +560,25 @@ export default function App() {
         <RecordGame
           players={players}
           house={house}
-          modeResolver={currentGame.getModeForSeat
+          modeResolver={recordGame.getModeForSeat
             ? seatCount => {
-                const m = currentGame.getModeForSeat(seatCount, currentGame.modes);
+                const m = recordGame.getModeForSeat(seatCount, recordGame.modes);
                 return { mode: m.id, eloKey: m.eloKey, winsKey: m.winsKey, gamesKey: m.gamesKey };
               }
             : () => ({ mode: recordMode.id, eloKey: recordMode.eloKey, winsKey: recordMode.winsKey, gamesKey: recordMode.gamesKey })
           }
-          seatOptions={currentGame.recordSeatOptions ?? recordMode.seatOptions}
+          seatOptions={recordGame.recordSeatOptions ?? recordMode.seatOptions}
           usePlacement={recordMode.usePlacement ?? false}
           onClose={() => setShowRecordGame(false)}
-          onSubmitted={() => fetchGames(currentMode)}
+          onSubmitted={() => currentMode && fetchGames(currentMode)}
+        />
+      )}
+
+      {profilePlayer && (
+        <PlayerProfile
+          player={profilePlayer}
+          house={house}
+          onClose={() => setProfilePlayer(null)}
         />
       )}
     </div>
