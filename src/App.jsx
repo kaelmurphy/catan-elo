@@ -213,12 +213,12 @@ export default function App() {
 
   useEffect(() => { if (house) fetchPlayers(); }, [house]);
   useEffect(() => {
-    if (house) {
+    if (house && currentMode) {
       fetchGames(currentMode);
       fetchAllGames(currentMode);
       fetchEloHistory(currentMode);
     }
-  }, [currentMode.id, house]);
+  }, [currentMode?.id, house]);
 
   useEffect(() => {
     const channel = supabase
@@ -232,14 +232,16 @@ export default function App() {
     const channel = supabase
       .channel('games-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games' }, () => {
-        fetchGames(currentMode);
-        fetchAllGames(currentMode);
-        fetchEloHistory(currentMode);
+        if (currentMode) {
+          fetchGames(currentMode);
+          fetchAllGames(currentMode);
+          fetchEloHistory(currentMode);
+        }
         fetchPlayers();
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [currentMode.id]);
+  }, [currentMode?.id]);
 
   function handleAdminLogin() {
     if (adminInput === ADMIN_PASSWORD) {
