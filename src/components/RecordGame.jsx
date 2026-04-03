@@ -4,8 +4,13 @@ import { supabase } from '../lib/supabase';
 
 const ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
 
-export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, seatOptions, usePlacement, onClose, onSubmitted }) {
+export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, seatOptions, seatModeMap, usePlacement, onClose, onSubmitted }) {
   const [seatCount, setSeatCount] = useState(seatOptions[seatOptions.length - 1]);
+
+  const effectiveMode = seatModeMap?.[seatCount]?.mode ?? mode;
+  const effectiveEloKey = seatModeMap?.[seatCount]?.eloKey ?? eloKey;
+  const effectiveWinsKey = seatModeMap?.[seatCount]?.winsKey ?? winsKey;
+  const effectiveGamesKey = seatModeMap?.[seatCount]?.gamesKey ?? gamesKey;
   const [assignments, setAssignments] = useState({});
   // Catan: which team number won
   const [winningTeam, setWinningTeam] = useState(null);
@@ -30,7 +35,7 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
   const allRanked = rankedTeamNums.length === seatCount;
 
   const teamsForElo = teams.map(t => ({
-    players: t.players.map(p => ({ id: p.id, elo: p[eloKey], games: p[gamesKey] })),
+    players: t.players.map(p => ({ id: p.id, elo: p[effectiveEloKey], games: p[effectiveGamesKey] })),
   }));
 
   const preview = (() => {
@@ -83,9 +88,9 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
         const { error: err } = await supabase
           .from('players')
           .update({
-            [eloKey]: player[eloKey] + changes[player.id],
-            [winsKey]: isWinner ? player[winsKey] + 1 : player[winsKey],
-            [gamesKey]: player[gamesKey] + 1,
+            [effectiveEloKey]: player[effectiveEloKey] + changes[player.id],
+            [effectiveWinsKey]: isWinner ? player[effectiveWinsKey] + 1 : player[effectiveWinsKey],
+            [effectiveGamesKey]: player[effectiveGamesKey] + 1,
           })
           .eq('id', player.id);
 
@@ -98,7 +103,7 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
     }
 
     const { data: gameData, error: gameErr } = await supabase.from('games').insert({
-      mode,
+      mode: effectiveMode,
       winner_id: teams[winningTeamNum - 1].players[0].id,
       player_ids: teams.flatMap(t => t.players.map(p => p.id)),
       elo_changes: changes,
@@ -118,8 +123,8 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
       team.players.map(player => ({
         game_id: gameData.id,
         player_id: player.id,
-        elo: player[eloKey] + changes[player.id],
-        mode,
+        elo: player[effectiveEloKey] + changes[player.id],
+        mode: effectiveMode,
       }))
     );
     await supabase.from('elo_history').insert(historyRows);
@@ -167,7 +172,7 @@ export default function RecordGame({ players, mode, eloKey, winsKey, gamesKey, s
               <div key={player.id} className="flex items-center gap-2">
                 <span className="text-sm font-medium text-slate-700 flex-1 truncate">
                   {player.name}
-                  <span className="ml-1 text-xs text-slate-400">{player[eloKey]}</span>
+                  <span className="ml-1 text-xs text-slate-400">{player[effectiveEloKey]}</span>
                 </span>
                 <div className="flex gap-1">
                   {Array.from({ length: seatCount }, (_, i) => i + 1).map(num => (

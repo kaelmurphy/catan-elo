@@ -334,7 +334,7 @@ export default function App() {
           streaks={streaks}
         />
 
-        <EloChart eloHistory={eloHistory} players={players} />
+        <EloChart eloHistory={eloHistory} players={players} mode={currentMode} />
 
         <HeadToHead games={allGames} players={displayPlayers} />
 
@@ -453,19 +453,33 @@ export default function App() {
         </div>
       )}
 
-      {showRecordGame && (
-        <RecordGame
-          players={players}
-          mode={recordMode.id}
-          eloKey={recordMode.eloKey}
-          winsKey={recordMode.winsKey}
-          gamesKey={recordMode.gamesKey}
-          seatOptions={recordMode.seatOptions}
-          usePlacement={recordMode.usePlacement ?? false}
-          onClose={() => setShowRecordGame(false)}
-          onSubmitted={() => fetchGames(currentMode)}
-        />
-      )}
+      {showRecordGame && (() => {
+        let seatOptions, seatModeMap;
+        if (currentMode.virtual) {
+          const subModes = currentGame.modes.filter(m => currentMode.fetchModes.includes(m.id));
+          seatOptions = subModes.flatMap(m => m.seatOptions).sort((a, b) => a - b);
+          seatModeMap = {};
+          subModes.forEach(m => m.seatOptions.forEach(s => {
+            seatModeMap[s] = { mode: m.id, eloKey: m.eloKey, winsKey: m.winsKey, gamesKey: m.gamesKey };
+          }));
+        } else {
+          seatOptions = recordMode.seatOptions;
+        }
+        return (
+          <RecordGame
+            players={players}
+            mode={recordMode.id}
+            eloKey={recordMode.eloKey}
+            winsKey={recordMode.winsKey}
+            gamesKey={recordMode.gamesKey}
+            seatOptions={seatOptions}
+            seatModeMap={seatModeMap}
+            usePlacement={recordMode.usePlacement ?? false}
+            onClose={() => setShowRecordGame(false)}
+            onSubmitted={() => fetchGames(currentMode)}
+          />
+        );
+      })()}
     </div>
   );
 }
