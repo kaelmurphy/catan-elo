@@ -7,6 +7,26 @@ export default function EloChart({ eloHistory, players, mode }) {
   const [activePoint, setActivePoint] = useState(null);
   const playerMapRef = useRef({});
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tooltipContent = useCallback(({ active, payload, label }) => {
+    requestAnimationFrame(() => {
+      if (active && payload?.length) {
+        const entries = payload
+          .filter(p => p.value != null)
+          .map(p => ({
+            id: p.dataKey,
+            name: playerMapRef.current[p.dataKey] ?? p.dataKey,
+            elo: p.value,
+          }))
+          .sort((a, b) => b.elo - a.elo);
+        setActivePoint({ label, entries });
+      } else {
+        setActivePoint(null);
+      }
+    });
+    return null;
+  }, []); // stable reference — reads playerMap via ref
+
   if (!eloHistory || eloHistory.length === 0) return null;
 
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
@@ -77,26 +97,6 @@ export default function EloChart({ eloHistory, players, mode }) {
   }
 
   const colorMap = Object.fromEntries(playerIds.map((id, i) => [id, COLORS[i % COLORS.length]]));
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const tooltipContent = useCallback(({ active, payload, label }) => {
-    requestAnimationFrame(() => {
-      if (active && payload?.length) {
-        const entries = payload
-          .filter(p => p.value != null)
-          .map(p => ({
-            id: p.dataKey,
-            name: playerMapRef.current[p.dataKey] ?? p.dataKey,
-            elo: p.value,
-          }))
-          .sort((a, b) => b.elo - a.elo);
-        setActivePoint({ label, entries });
-      } else {
-        setActivePoint(null);
-      }
-    });
-    return null;
-  }, []); // stable reference — reads playerMap via ref
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
