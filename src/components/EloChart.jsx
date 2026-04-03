@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
@@ -101,6 +101,7 @@ export default function EloChart({ eloHistory, players, mode }) {
             >
               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={42} />
+              <Tooltip content={() => null} />
               <Legend
                 formatter={id => playerMap[id] ?? id}
                 wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
