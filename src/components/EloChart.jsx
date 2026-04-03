@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
 export default function EloChart({ eloHistory, players, mode }) {
   const [activePoint, setActivePoint] = useState(null);
+  const playerMapRef = useRef({});
 
   if (!eloHistory || eloHistory.length === 0) return null;
 
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
+  playerMapRef.current = playerMap;
+
   const allPlayerIds = [...new Set(eloHistory.map(h => h.player_id))];
   const playerIds = allPlayerIds.filter(id => playerMap[id]);
 
@@ -75,17 +78,25 @@ export default function EloChart({ eloHistory, players, mode }) {
 
   const colorMap = Object.fromEntries(playerIds.map((id, i) => [id, COLORS[i % COLORS.length]]));
 
-  const handleMouseMove = (state) => {
-    if (state?.activePayload && state.activeLabel) {
-      const entries = state.activePayload
-        .filter(p => p.value != null)
-        .map(p => ({ id: p.dataKey, name: playerMap[p.dataKey] ?? p.dataKey, elo: p.value, color: p.stroke }))
-        .sort((a, b) => b.elo - a.elo);
-      setActivePoint({ label: state.activeLabel, entries });
-    }
-  };
-
-  const handleMouseLeave = () => setActivePoint(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tooltipContent = useCallback(({ active, payload, label }) => {
+    requestAnimationFrame(() => {
+      if (active && payload?.length) {
+        const entries = payload
+          .filter(p => p.value != null)
+          .map(p => ({
+            id: p.dataKey,
+            name: playerMapRef.current[p.dataKey] ?? p.dataKey,
+            elo: p.value,
+          }))
+          .sort((a, b) => b.elo - a.elo);
+        setActivePoint({ label, entries });
+      } else {
+        setActivePoint(null);
+      }
+    });
+    return null;
+  }, []); // stable reference — reads playerMap via ref
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
@@ -93,15 +104,10 @@ export default function EloChart({ eloHistory, players, mode }) {
       <div className="flex gap-3">
         <div className="flex-1 min-w-0">
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart
-              data={chartData}
-              margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-            >
+            <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={42} />
-              <Tooltip content={() => null} />
+              <Tooltip content={tooltipContent} />
               <Legend
                 formatter={id => playerMap[id] ?? id}
                 wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
@@ -123,7 +129,7 @@ export default function EloChart({ eloHistory, players, mode }) {
         </div>
 
         <div className="w-36 shrink-0 flex flex-col justify-center">
-          {activePoint ? (
+          {activePoint && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
               <div className="text-xs font-semibold text-slate-500 mb-2">{activePoint.label}</div>
               <div className="flex flex-col gap-1">
@@ -135,7 +141,7 @@ export default function EloChart({ eloHistory, players, mode }) {
                 ))}
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
