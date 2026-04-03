@@ -435,7 +435,7 @@ export default function App() {
               streaks={streaks}
             />
 
-            <EloChart eloHistory={eloHistory} players={players} />
+            <EloChart eloHistory={eloHistory} players={players} mode={currentMode} />
 
             <HeadToHead games={allGames} players={displayPlayers} />
 
