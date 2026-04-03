@@ -1,18 +1,10 @@
-export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onAddPlayer, onEditPlayer, renderRecord, streaks }) {
+export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onEditPlayer, renderRecord, streaks }) {
   const sorted = [...players].sort((a, b) => b[eloKey] - a[eloKey]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-base font-bold text-slate-800">Leaderboard</h2>
-        {onAddPlayer && (
-          <button
-            onClick={onAddPlayer}
-            className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
-          >
-            + Add Player
-          </button>
-        )}
       </div>
 
       {sorted.length === 0 ? (
