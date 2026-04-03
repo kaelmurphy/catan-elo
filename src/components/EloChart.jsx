@@ -1,13 +1,16 @@
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Legend } from 'recharts';
 
 const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
 export default function EloChart({ eloHistory, players, mode }) {
+  const [activePoint, setActivePoint] = useState(null);
+
   if (!eloHistory || eloHistory.length === 0) return null;
 
   const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
   const allPlayerIds = [...new Set(eloHistory.map(h => h.player_id))];
-  const playerIds = allPlayerIds.filter(id => playerMap[id]); // exclude hidden players
+  const playerIds = allPlayerIds.filter(id => playerMap[id]);
 
   if (playerIds.length === 0) return null;
 
@@ -17,7 +20,6 @@ export default function EloChart({ eloHistory, players, mode }) {
   let chartData;
 
   if (mode?.virtual && mode.fetchModes) {
-    // For virtual/overall modes, compute weighted ELO across all sub-modes
     const fetchModes = mode.fetchModes;
     const playerModeState = {};
     playerIds.forEach(id => {
@@ -51,7 +53,6 @@ export default function EloChart({ eloHistory, players, mode }) {
       });
     });
   } else {
-    // Non-virtual mode: plot mode-specific elo directly
     const currentElos = Object.fromEntries(playerIds.map(id => [id, null]));
 
     chartData = [{ label: 'Start', ...Object.fromEntries(playerIds.map(id => [id, null])) }];
@@ -72,36 +73,70 @@ export default function EloChart({ eloHistory, players, mode }) {
     });
   }
 
+  const colorMap = Object.fromEntries(playerIds.map((id, i) => [id, COLORS[i % COLORS.length]]));
+
+  const handleMouseMove = (state) => {
+    if (state?.activePayload && state.activeLabel) {
+      const entries = state.activePayload
+        .filter(p => p.value != null)
+        .map(p => ({ id: p.dataKey, name: playerMap[p.dataKey] ?? p.dataKey, elo: p.value, color: p.stroke }))
+        .sort((a, b) => b.elo - a.elo);
+      setActivePoint({ label: state.activeLabel, entries });
+    }
+  };
+
+  const handleMouseLeave = () => setActivePoint(null);
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
       <h2 className="text-base font-bold text-slate-800 mb-4">ELO History</h2>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={42} />
-          <Tooltip
-            contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-            formatter={(value, _name, props) => [value, playerMap[props.dataKey] ?? props.dataKey]}
-            labelFormatter={label => label}
-          />
-          <Legend
-            formatter={id => playerMap[id] ?? id}
-            wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-          />
-          {playerIds.map((id, i) => (
-            <Line
-              key={id}
-              type="linear"
-              dataKey={id}
-              name={playerMap[id]}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 2 }}
-              activeDot={{ r: 4 }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+      <div className="flex gap-3">
+        <div className="flex-1 min-w-0">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={42} />
+              <Legend
+                formatter={id => playerMap[id] ?? id}
+                wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+              />
+              {playerIds.map((id, i) => (
+                <Line
+                  key={id}
+                  type="linear"
+                  dataKey={id}
+                  name={playerMap[id]}
+                  stroke={COLORS[i % COLORS.length]}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="w-36 shrink-0 flex flex-col justify-center">
+          {activePoint ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <div className="text-xs font-semibold text-slate-500 mb-2">{activePoint.label}</div>
+              <div className="flex flex-col gap-1">
+                {activePoint.entries.map(({ id, name, elo }) => (
+                  <div key={id} className="flex justify-between items-center gap-2">
+                    <span className="text-xs font-medium truncate" style={{ color: colorMap[id] }}>{name}</span>
+                    <span className="text-xs text-slate-700 font-mono shrink-0">{elo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
