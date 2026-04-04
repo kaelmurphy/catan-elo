@@ -61,7 +61,7 @@ export default function EloChart({ eloHistory, players, mode }) {
     chartData = [{ label: 'Start', ...Object.fromEntries(playerIds.map(id => [id, null])) }];
 
     gameIds.forEach((gameId, idx) => {
-      const gameEntries = eloHistory.filter(h => h.game_id === gameId && playerModeState[h.player_id]);
+      const gameEntries = eloHistory.filter(h => h.game_id === gameId && playerModeState[h.player_id] && playerModeState[h.player_id][h.mode]);
       gameEntries.forEach(h => {
         if (!hasPlayed[h.player_id]) {
           chartData[chartData.length - 1][h.player_id] = computeOverall(h.player_id);
