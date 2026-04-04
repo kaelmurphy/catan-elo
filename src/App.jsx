@@ -30,8 +30,7 @@ const GAMES = [
             games,
           };
         },
-        renderRecord: p =>
-          `4p: ${p.wins_4p}–${p.games_4p - p.wins_4p}  |  6p: ${p.wins_6p}–${p.games_6p - p.wins_6p}`,
+        renderRecord: p => `4p: ${p.wins_4p}–${p.games_4p - p.wins_4p}  |  6p: ${p.wins_6p}–${p.games_6p - p.wins_6p}`,
       },
       { id: '4p', label: '3–4 Players', eloKey: 'elo_4p', winsKey: 'wins_4p', gamesKey: 'games_4p', seatOptions: [3, 4] },
       { id: '6p', label: '5–6 Players', eloKey: 'elo_6p', winsKey: 'wins_6p', gamesKey: 'games_6p', seatOptions: [5, 6] },
@@ -49,11 +48,7 @@ const GAMES = [
         eloKey: 'elo_ttr_overall',
         winsKey: 'wins_ttr_overall',
         gamesKey: 'games_ttr_overall',
-        computeStats: p => ({
-          elo: p.elo_ttr,
-          wins: p.wins_ttr,
-          games: p.games_ttr,
-        }),
+        computeStats: p => ({ elo: p.elo_ttr, wins: p.wins_ttr, games: p.games_ttr }),
       },
       { id: 'ttr', label: '2–5 Players', hidden: true, eloKey: 'elo_ttr', winsKey: 'wins_ttr', gamesKey: 'games_ttr', seatOptions: [2, 3, 4, 5], usePlacement: true },
     ],
@@ -61,11 +56,11 @@ const GAMES = [
 ];
 
 const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
-
 const HOUSES = [
   { id: 'hickory', label: 'Hickory' },
   { id: 'hillside', label: 'Hillside' },
 ];
+const NAV_TABS = [...GAMES, { id: 'players', label: 'Roster' }];
 
 export default function App() {
   const [house, setHouse] = useState(() => localStorage.getItem('house') ?? null);
@@ -73,6 +68,8 @@ export default function App() {
   const [modeId, setModeId] = useState('catan_overall');
   const [players, setPlayers] = useState([]);
   const [games, setGames] = useState([]);
+  const [allGames, setAllGames] = useState([]);
+  const [eloHistory, setEloHistory] = useState([]);
   const [showRecordGame, setShowRecordGame] = useState(false);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
@@ -84,16 +81,45 @@ export default function App() {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminInput, setAdminInput] = useState('');
   const [adminError, setAdminError] = useState(false);
-  const [allGames, setAllGames] = useState([]);
-  const [eloHistory, setEloHistory] = useState([]);
   const [profilePlayer, setProfilePlayer] = useState(null);
 
-  function selectHouse(id) {
-    if (id) {
-      localStorage.setItem('house', id);
-    } else {
-      localStorage.removeItem('house');
+  const currentGame = gameId === 'players' ? null : GAMES.find(g => g.id === gameId);
+  const currentMode = currentGame ? (currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0]) : null;
+
+  const displayPlayers = useMemo(() => {
+    if (!currentMode) return players;
+    if (!currentMode.virtual) return players.filter(p => p[currentMode.gamesKey] > 0);
+    return players
+      .map(p => {
+        const { elo, wins, games } = currentMode.computeStats(p);
+        return { ...p, [currentMode.eloKey]: elo, [currentMode.winsKey]: wins, [currentMode.gamesKey]: games };
+      })
+      .filter(p => p[currentMode.gamesKey] > 0);
+  }, [players, currentMode]);
+
+  const recordGame = currentGame ?? GAMES[0];
+  const recordMode = currentMode
+    ? (currentMode.virtual ? currentGame.modes.find(m => !m.virtual) : currentMode)
+    : (recordGame.modes.find(m => !m.virtual) ?? recordGame.modes[0]);
+
+  const streaks = useMemo(() => {
+    const result = {};
+    for (const player of players) {
+      let streak = 0;
+      for (const game of allGames) {
+        if (!game.player_ids.includes(player.id)) continue;
+        const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
+        if (winnerIds.includes(player.id)) streak++;
+        else break;
+      }
+      result[player.id] = streak;
     }
+    return result;
+  }, [allGames, players]);
+
+  function selectHouse(id) {
+    if (id) localStorage.setItem('house', id);
+    else localStorage.removeItem('house');
     setHouse(id);
     setPlayers([]);
     setGames([]);
@@ -101,31 +127,6 @@ export default function App() {
     setEloHistory([]);
     setAdminUnlocked(false);
   }
-
-  const currentGame = gameId === 'players' ? null : GAMES.find(g => g.id === gameId);
-  const currentMode = currentGame ? (currentGame.modes.find(m => m.id === modeId) ?? currentGame.modes[0]) : null;
-
-  const displayPlayers = currentMode
-    ? (currentMode.virtual
-        ? players
-            .map(p => {
-              const stats = currentMode.computeStats(p);
-              return {
-                ...p,
-                [currentMode.eloKey]: stats.elo,
-                [currentMode.winsKey]: stats.wins,
-                [currentMode.gamesKey]: stats.games,
-              };
-            })
-            .filter(p => p[currentMode.gamesKey] > 0)
-        : players.filter(p => p[currentMode.gamesKey] > 0))
-    : players;
-
-  const recordGame = currentGame ?? GAMES[0];
-  const recordMode = (() => {
-    if (!currentMode) return recordGame.modes.find(m => !m.virtual) ?? recordGame.modes[0];
-    return currentMode.virtual ? currentGame.modes.find(m => !m.virtual) : currentMode;
-  })();
 
   function selectGame(id) {
     setGameId(id);
@@ -137,91 +138,43 @@ export default function App() {
     if (data) setPlayers(data);
   }
 
-  async function fetchGames(mode) {
+  async function fetchGameData(mode) {
     const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
-    const { data } = await supabase
-      .from('games')
-      .select('*')
-      .in('mode', modesToFetch)
-      .eq('house', house)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    if (data) setGames(data);
-  }
-
-  async function fetchAllGames(mode) {
-    const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
-    const { data } = await supabase
-      .from('games')
-      .select('*')
-      .in('mode', modesToFetch)
-      .eq('house', house)
-      .order('created_at', { ascending: false });
-    if (data) setAllGames(data);
-  }
-
-  async function fetchEloHistory(mode) {
-    const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
-    const { data } = await supabase
-      .from('elo_history')
-      .select('*')
-      .in('mode', modesToFetch)
-      .order('created_at', { ascending: true });
-    if (data) setEloHistory(data);
+    const [gamesRes, allGamesRes, historyRes] = await Promise.all([
+      supabase.from('games').select('*').in('mode', modesToFetch).eq('house', house).order('created_at', { ascending: false }).limit(20),
+      supabase.from('games').select('*').in('mode', modesToFetch).eq('house', house).order('created_at', { ascending: false }),
+      supabase.from('elo_history').select('*').in('mode', modesToFetch).order('created_at', { ascending: true }),
+    ]);
+    if (gamesRes.data) setGames(gamesRes.data);
+    if (allGamesRes.data) setAllGames(allGamesRes.data);
+    if (historyRes.data) setEloHistory(historyRes.data);
   }
 
   async function handleUndoGame(game) {
     if (!adminUnlocked) return;
-    // Reverse ELO changes
-    for (const playerId of game.player_ids) {
-      const player = players.find(p => p.id === playerId);
-      if (!player) continue;
-      const delta = game.elo_changes[playerId] ?? 0;
-      const mode = game.mode;
-      const eloK = currentGame.modes.find(m => m.id === mode)?.eloKey ?? recordMode.eloKey;
-      const winsK = currentGame.modes.find(m => m.id === mode)?.winsKey ?? recordMode.winsKey;
-      const gamesK = currentGame.modes.find(m => m.id === mode)?.gamesKey ?? recordMode.gamesKey;
-      const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
-      const wasWinner = winnerIds.includes(playerId);
-      await supabase.from('players').update({
-        [eloK]: player[eloK] - delta,
-        [winsK]: wasWinner ? player[winsK] - 1 : player[winsK],
-        [gamesK]: player[gamesK] - 1,
-      }).eq('id', playerId);
-    }
+    const gameMode = currentGame.modes.find(m => m.id === game.mode) ?? recordMode;
+    const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
+    await Promise.all(
+      game.player_ids.map(playerId => {
+        const player = players.find(p => p.id === playerId);
+        if (!player) return Promise.resolve();
+        const delta = game.elo_changes[playerId] ?? 0;
+        return supabase.from('players').update({
+          [gameMode.eloKey]: player[gameMode.eloKey] - delta,
+          [gameMode.winsKey]: winnerIds.includes(playerId) ? player[gameMode.winsKey] - 1 : player[gameMode.winsKey],
+          [gameMode.gamesKey]: player[gameMode.gamesKey] - 1,
+        }).eq('id', playerId);
+      })
+    );
     await supabase.from('elo_history').delete().eq('game_id', game.id);
     await supabase.from('games').delete().eq('id', game.id);
     fetchPlayers();
-    fetchGames(currentMode);
-    fetchAllGames(currentMode);
-    fetchEloHistory(currentMode);
+    fetchGameData(currentMode);
   }
-
-  const streaks = useMemo(() => {
-    const result = {};
-    for (const player of players) {
-      let streak = 0;
-      for (const game of allGames) {
-        if (!game.player_ids.includes(player.id)) continue;
-        const winnerIds = game.teams ? game.teams[game.winning_team_index] : [game.winner_id];
-        if (winnerIds.includes(player.id)) {
-          streak++;
-        } else {
-          break;
-        }
-      }
-      result[player.id] = streak;
-    }
-    return result;
-  }, [allGames, players]);
 
   useEffect(() => { if (house) fetchPlayers(); }, [house]);
   useEffect(() => {
-    if (house && currentMode) {
-      fetchGames(currentMode);
-      fetchAllGames(currentMode);
-      fetchEloHistory(currentMode);
-    }
+    if (house && currentMode) fetchGameData(currentMode);
   }, [currentMode?.id, house]);
 
   useEffect(() => {
@@ -236,11 +189,7 @@ export default function App() {
     const channel = supabase
       .channel('games-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games' }, () => {
-        if (currentMode) {
-          fetchGames(currentMode);
-          fetchAllGames(currentMode);
-          fetchEloHistory(currentMode);
-        }
+        if (currentMode) fetchGameData(currentMode);
         fetchPlayers();
       })
       .subscribe();
@@ -280,10 +229,7 @@ export default function App() {
   async function handleDeletePlayer() {
     if (!editingPlayer) return;
     const { error } = await supabase.from('players').update({ hidden: true }).eq('id', editingPlayer.id);
-    if (error) {
-      setEditError('Failed to remove player.');
-      return;
-    }
+    if (error) { setEditError('Failed to remove player.'); return; }
     setEditingPlayer(null);
     setEditError('');
     fetchPlayers();
@@ -297,11 +243,8 @@ export default function App() {
           <p className="text-slate-400 mb-8 text-sm">Which house are you at?</p>
           <div className="flex gap-4 justify-center">
             {HOUSES.map(h => (
-              <button
-                key={h.id}
-                onClick={() => selectHouse(h.id)}
-                className="px-8 py-4 bg-blue-600 text-white text-lg font-bold rounded-2xl hover:bg-blue-500 transition shadow-lg"
-              >
+              <button key={h.id} onClick={() => selectHouse(h.id)}
+                className="px-8 py-4 bg-blue-600 text-white text-lg font-bold rounded-2xl hover:bg-blue-500 transition shadow-lg">
                 {h.label}
               </button>
             ))}
@@ -318,49 +261,35 @@ export default function App() {
       <header className="bg-slate-900">
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center justify-between pt-5 pb-3">
-            <button
-              onClick={() => selectHouse(null)}
+            <button onClick={() => selectHouse(null)}
               className="text-lg font-bold text-white tracking-tight hover:text-slate-300 transition text-left"
-              title="Switch house"
-            >
+              title="Switch house">
               {houseLabel} Leaderboards
             </button>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowRecordGame(true)}
-                className="px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition"
-              >
+              <button onClick={() => setShowRecordGame(true)}
+                className="px-4 py-1.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-500 transition">
                 + Record Game
               </button>
               {adminUnlocked ? (
-                <button
-                  onClick={() => setAdminUnlocked(false)}
+                <button onClick={() => setAdminUnlocked(false)}
                   className="text-xs text-green-400 hover:text-green-300 transition font-medium"
-                  title="Click to lock"
-                >
+                  title="Click to lock">
                   Admin
                 </button>
               ) : (
-                <button
-                  onClick={() => setShowAdminLogin(true)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition"
-                >
+                <button onClick={() => setShowAdminLogin(true)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition">
                   Admin
                 </button>
               )}
             </div>
           </div>
           <div className="flex gap-1">
-            {[...GAMES, { id: 'players', label: 'Roster' }].map(g => (
-              <button
-                key={g.id}
-                onClick={() => selectGame(g.id)}
+            {NAV_TABS.map(g => (
+              <button key={g.id} onClick={() => selectGame(g.id)}
                 className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition
-                  ${gameId === g.id
-                    ? 'bg-slate-50 text-slate-900'
-                    : 'text-slate-400 hover:text-slate-100'
-                  }`}
-              >
+                  ${gameId === g.id ? 'bg-slate-50 text-slate-900' : 'text-slate-400 hover:text-slate-100'}`}>
                 {g.label}
               </button>
             ))}
@@ -373,10 +302,8 @@ export default function App() {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold text-slate-800">Roster</h2>
-              <button
-                onClick={() => setShowAddPlayer(true)}
-                className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
-              >
+              <button onClick={() => setShowAddPlayer(true)}
+                className="text-sm px-3 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
                 + Add Player
               </button>
             </div>
@@ -386,17 +313,13 @@ export default function App() {
               <ul className="divide-y divide-slate-50">
                 {players.map(p => (
                   <li key={p.id} className="flex items-center justify-between py-2.5">
-                    <button
-                      onClick={() => setProfilePlayer(p)}
-                      className="text-sm font-medium text-slate-800 hover:text-blue-600 transition text-left"
-                    >
+                    <button onClick={() => setProfilePlayer(p)}
+                      className="text-sm font-medium text-slate-800 hover:text-blue-600 transition text-left">
                       {p.name}
                     </button>
                     {adminUnlocked && (
-                      <button
-                        onClick={() => { setEditingPlayer(p); setEditName(p.name); setEditError(''); }}
-                        className="text-slate-300 hover:text-slate-500 transition text-xs px-1"
-                      >
+                      <button onClick={() => { setEditingPlayer(p); setEditName(p.name); setEditError(''); }}
+                        className="text-slate-300 hover:text-slate-500 transition text-xs px-1">
                         ✎
                       </button>
                     )}
@@ -410,21 +333,14 @@ export default function App() {
             {currentGame.modes.filter(m => !m.hidden).length > 1 && (
               <div className="flex gap-2">
                 {currentGame.modes.filter(m => !m.hidden).map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setModeId(m.id)}
+                  <button key={m.id} onClick={() => setModeId(m.id)}
                     className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition
-                      ${modeId === m.id
-                        ? 'bg-slate-800 text-white'
-                        : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'
-                      }`}
-                  >
+                      ${modeId === m.id ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:border-slate-400'}`}>
                     {m.label}
                   </button>
                 ))}
               </div>
             )}
-
             <Leaderboard
               players={displayPlayers}
               eloKey={currentMode.eloKey}
@@ -434,16 +350,9 @@ export default function App() {
               renderRecord={currentMode.renderRecord}
               streaks={streaks}
             />
-
             <EloChart eloHistory={eloHistory} players={players} mode={currentMode} />
-
             <HeadToHead games={allGames} players={displayPlayers} />
-
-            <GameHistory
-              games={games}
-              players={players}
-              onUndo={adminUnlocked ? handleUndoGame : null}
-            />
+            <GameHistory games={games} players={players} onUndo={adminUnlocked ? handleUndoGame : null} />
           </>
         )}
       </main>
@@ -454,31 +363,21 @@ export default function App() {
             <h2 className="text-lg font-bold text-slate-800 mb-1">Admin</h2>
             <p className="text-sm text-slate-400 mb-4">Enter your password to unlock admin controls.</p>
             <input
-              autoFocus
-              type="password"
-              placeholder="Password"
-              value={adminInput}
+              autoFocus type="password" placeholder="Password" value={adminInput}
               onChange={e => { setAdminInput(e.target.value); setAdminError(false); }}
               onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
               className={`w-full border rounded-lg px-3 py-2 text-sm mb-1 focus:outline-none focus:ring-1 transition
-                ${adminError
-                  ? 'border-red-400 focus:border-red-400 focus:ring-red-400'
-                  : 'border-slate-200 focus:border-blue-400 focus:ring-blue-400'
-                }`}
+                ${adminError ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-slate-200 focus:border-blue-400 focus:ring-blue-400'}`}
             />
             {adminError && <p className="text-red-500 text-xs mb-3">Incorrect password.</p>}
             {!adminError && <div className="mb-3" />}
             <div className="flex gap-2">
-              <button
-                onClick={() => { setShowAdminLogin(false); setAdminInput(''); setAdminError(false); }}
-                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm"
-              >
+              <button onClick={() => { setShowAdminLogin(false); setAdminInput(''); setAdminError(false); }}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm">
                 Cancel
               </button>
-              <button
-                onClick={handleAdminLogin}
-                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 transition text-sm"
-              >
+              <button onClick={handleAdminLogin}
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 transition text-sm">
                 Unlock
               </button>
             </div>
@@ -491,26 +390,18 @@ export default function App() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h2 className="text-lg font-bold text-slate-800 mb-4">Add Player</h2>
             <input
-              autoFocus
-              type="text"
-              placeholder="Player name"
-              value={newPlayerName}
+              autoFocus type="text" placeholder="Player name" value={newPlayerName}
               onChange={e => setNewPlayerName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddPlayer()}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
             <div className="flex gap-2">
-              <button
-                onClick={() => { setShowAddPlayer(false); setNewPlayerName(''); }}
-                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm"
-              >
+              <button onClick={() => { setShowAddPlayer(false); setNewPlayerName(''); }}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm">
                 Cancel
               </button>
-              <button
-                onClick={handleAddPlayer}
-                disabled={!newPlayerName.trim() || addingPlayer}
-                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 transition text-sm"
-              >
+              <button onClick={handleAddPlayer} disabled={!newPlayerName.trim() || addingPlayer}
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 transition text-sm">
                 {addingPlayer ? 'Adding...' : 'Add'}
               </button>
             </div>
@@ -523,32 +414,23 @@ export default function App() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <h2 className="text-lg font-bold text-slate-800 mb-4">Edit Player</h2>
             <input
-              autoFocus
-              type="text"
-              value={editName}
+              autoFocus type="text" value={editName}
               onChange={e => setEditName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleRenamePlayer()}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
             />
             <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => setEditingPlayer(null)}
-                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm"
-              >
+              <button onClick={() => setEditingPlayer(null)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition text-sm">
                 Cancel
               </button>
-              <button
-                onClick={handleRenamePlayer}
-                disabled={!editName.trim()}
-                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 transition text-sm"
-              >
+              <button onClick={handleRenamePlayer} disabled={!editName.trim()}
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-40 transition text-sm">
                 Save
               </button>
             </div>
-            <button
-              onClick={handleDeletePlayer}
-              className="w-full py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition text-sm"
-            >
+            <button onClick={handleDeletePlayer}
+              className="w-full py-2 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition text-sm">
               Delete Player
             </button>
             {editError && <p className="text-red-500 text-xs mt-2 text-center">{editError}</p>}
@@ -570,16 +452,12 @@ export default function App() {
           seatOptions={recordGame.recordSeatOptions ?? recordMode.seatOptions}
           usePlacement={recordMode.usePlacement ?? false}
           onClose={() => setShowRecordGame(false)}
-          onSubmitted={() => currentMode && fetchGames(currentMode)}
+          onSubmitted={() => currentMode && fetchGameData(currentMode)}
         />
       )}
 
       {profilePlayer && (
-        <PlayerProfile
-          player={profilePlayer}
-          house={house}
-          onClose={() => setProfilePlayer(null)}
-        />
+        <PlayerProfile player={profilePlayer} house={house} onClose={() => setProfilePlayer(null)} />
       )}
     </div>
   );

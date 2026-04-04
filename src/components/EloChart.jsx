@@ -1,7 +1,57 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+function buildChartData(eloHistory, playerIds, mode) {
+  const gameIds = [...new Set(eloHistory.map(h => h.game_id))];
+  const hasPlayed = Object.fromEntries(playerIds.map(id => [id, false]));
+  const startRow = { label: 'Start', ...Object.fromEntries(playerIds.map(id => [id, null])) };
+
+  if (mode?.virtual && mode.fetchModes) {
+    const { fetchModes } = mode;
+    const playerModeState = Object.fromEntries(
+      playerIds.map(id => [id, Object.fromEntries(fetchModes.map(m => [m, { elo: 1200, games: 0 }]))])
+    );
+    const computeOverall = id => {
+      const state = playerModeState[id];
+      const totalGames = fetchModes.reduce((sum, m) => sum + state[m].games, 0);
+      if (totalGames === 0) return 1200;
+      return Math.round(fetchModes.reduce((sum, m) => sum + state[m].elo * state[m].games, 0) / totalGames);
+    };
+    const data = [{ ...startRow }];
+    gameIds.forEach((gameId, idx) => {
+      eloHistory
+        .filter(h => h.game_id === gameId && playerModeState[h.player_id]?.[h.mode])
+        .forEach(h => {
+          if (!hasPlayed[h.player_id]) {
+            data[data.length - 1][h.player_id] = computeOverall(h.player_id);
+            hasPlayed[h.player_id] = true;
+          }
+          playerModeState[h.player_id][h.mode].elo = h.elo;
+          playerModeState[h.player_id][h.mode].games += 1;
+        });
+      data.push({ label: `G${idx + 1}`, ...Object.fromEntries(playerIds.map(id => [id, hasPlayed[id] ? computeOverall(id) : null])) });
+    });
+    return data;
+  }
+
+  const currentElos = Object.fromEntries(playerIds.map(id => [id, null]));
+  const data = [{ ...startRow }];
+  gameIds.forEach((gameId, idx) => {
+    eloHistory
+      .filter(h => h.game_id === gameId && currentElos[h.player_id] !== undefined)
+      .forEach(h => {
+        if (!hasPlayed[h.player_id]) {
+          data[data.length - 1][h.player_id] = 1200;
+          hasPlayed[h.player_id] = true;
+        }
+        currentElos[h.player_id] = h.elo;
+      });
+    data.push({ label: `G${idx + 1}`, ...Object.fromEntries(playerIds.map(id => [id, currentElos[id]])) });
+  });
+  return data;
+}
 
 export default function EloChart({ eloHistory, players, mode }) {
   const [activePoint, setActivePoint] = useState(null);
@@ -13,11 +63,7 @@ export default function EloChart({ eloHistory, players, mode }) {
       if (active && payload?.length) {
         const entries = payload
           .filter(p => p.value != null)
-          .map(p => ({
-            id: p.dataKey,
-            name: playerMapRef.current[p.dataKey] ?? p.dataKey,
-            elo: p.value,
-          }))
+          .map(p => ({ id: p.dataKey, name: playerMapRef.current[p.dataKey] ?? p.dataKey, elo: p.value }))
           .sort((a, b) => b.elo - a.elo);
         setActivePoint({ label, entries });
       } else {
@@ -25,78 +71,27 @@ export default function EloChart({ eloHistory, players, mode }) {
       }
     });
     return null;
-  }, []); // stable reference — reads playerMap via ref
+  }, []);
 
-  if (!eloHistory || eloHistory.length === 0) return null;
-
-  const playerMap = Object.fromEntries(players.map(p => [p.id, p.name]));
+  const playerMap = useMemo(() => Object.fromEntries(players.map(p => [p.id, p.name])), [players]);
   playerMapRef.current = playerMap;
 
-  const allPlayerIds = [...new Set(eloHistory.map(h => h.player_id))];
-  const playerIds = allPlayerIds.filter(id => playerMap[id]);
+  const playerIds = useMemo(
+    () => [...new Set(eloHistory.map(h => h.player_id))].filter(id => playerMap[id]),
+    [eloHistory, playerMap]
+  );
 
-  if (playerIds.length === 0) return null;
+  const chartData = useMemo(
+    () => (eloHistory.length && playerIds.length) ? buildChartData(eloHistory, playerIds, mode) : null,
+    [eloHistory, playerIds, mode]
+  );
 
-  const gameIds = [...new Set(eloHistory.map(h => h.game_id))];
-  const hasPlayed = Object.fromEntries(playerIds.map(id => [id, false]));
+  const colorMap = useMemo(
+    () => Object.fromEntries(playerIds.map((id, i) => [id, COLORS[i % COLORS.length]])),
+    [playerIds]
+  );
 
-  let chartData;
-
-  if (mode?.virtual && mode.fetchModes) {
-    const fetchModes = mode.fetchModes;
-    const playerModeState = {};
-    playerIds.forEach(id => {
-      playerModeState[id] = {};
-      fetchModes.forEach(m => { playerModeState[id][m] = { elo: 1200, games: 0 }; });
-    });
-
-    const computeOverall = (id) => {
-      const state = playerModeState[id];
-      const totalGames = fetchModes.reduce((sum, m) => sum + state[m].games, 0);
-      if (totalGames === 0) return 1200;
-      const weightedSum = fetchModes.reduce((sum, m) => sum + state[m].elo * state[m].games, 0);
-      return Math.round(weightedSum / totalGames);
-    };
-
-    chartData = [{ label: 'Start', ...Object.fromEntries(playerIds.map(id => [id, null])) }];
-
-    gameIds.forEach((gameId, idx) => {
-      const gameEntries = eloHistory.filter(h => h.game_id === gameId && playerModeState[h.player_id] && playerModeState[h.player_id][h.mode]);
-      gameEntries.forEach(h => {
-        if (!hasPlayed[h.player_id]) {
-          chartData[chartData.length - 1][h.player_id] = computeOverall(h.player_id);
-          hasPlayed[h.player_id] = true;
-        }
-        playerModeState[h.player_id][h.mode].elo = h.elo;
-        playerModeState[h.player_id][h.mode].games += 1;
-      });
-      chartData.push({
-        label: `G${idx + 1}`,
-        ...Object.fromEntries(playerIds.map(id => [id, hasPlayed[id] ? computeOverall(id) : null])),
-      });
-    });
-  } else {
-    const currentElos = Object.fromEntries(playerIds.map(id => [id, null]));
-
-    chartData = [{ label: 'Start', ...Object.fromEntries(playerIds.map(id => [id, null])) }];
-
-    gameIds.forEach((gameId, idx) => {
-      const gameEntries = eloHistory.filter(h => h.game_id === gameId && currentElos[h.player_id] !== undefined);
-      gameEntries.forEach(h => {
-        if (!hasPlayed[h.player_id]) {
-          chartData[chartData.length - 1][h.player_id] = 1200;
-          hasPlayed[h.player_id] = true;
-        }
-        currentElos[h.player_id] = h.elo;
-      });
-      chartData.push({
-        label: `G${idx + 1}`,
-        ...Object.fromEntries(playerIds.map(id => [id, currentElos[id]])),
-      });
-    });
-  }
-
-  const colorMap = Object.fromEntries(playerIds.map((id, i) => [id, COLORS[i % COLORS.length]]));
+  if (!chartData) return null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
@@ -108,10 +103,7 @@ export default function EloChart({ eloHistory, players, mode }) {
               <XAxis dataKey="label" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={42} />
               <Tooltip content={tooltipContent} />
-              <Legend
-                formatter={id => playerMap[id] ?? id}
-                wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-              />
+              <Legend formatter={id => playerMap[id] ?? id} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
               {playerIds.map((id, i) => (
                 <Line
                   key={id}
@@ -127,7 +119,6 @@ export default function EloChart({ eloHistory, players, mode }) {
             </LineChart>
           </ResponsiveContainer>
         </div>
-
         <div className="w-36 shrink-0 flex flex-col justify-center">
           {activePoint && (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
