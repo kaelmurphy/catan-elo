@@ -67,7 +67,6 @@ export default function App() {
   const [gameId, setGameId] = useState('catan');
   const [modeId, setModeId] = useState('catan_overall');
   const [players, setPlayers] = useState([]);
-  const [games, setGames] = useState([]);
   const [allGames, setAllGames] = useState([]);
   const [eloHistory, setEloHistory] = useState([]);
   const [showRecordGame, setShowRecordGame] = useState(false);
@@ -122,7 +121,6 @@ export default function App() {
     else localStorage.removeItem('house');
     setHouse(id);
     setPlayers([]);
-    setGames([]);
     setAllGames([]);
     setEloHistory([]);
     setAdminUnlocked(false);
@@ -140,12 +138,10 @@ export default function App() {
 
   async function fetchGameData(mode) {
     const modesToFetch = mode.virtual ? mode.fetchModes : [mode.id];
-    const [gamesRes, allGamesRes, historyRes] = await Promise.all([
-      supabase.from('games').select('*').in('mode', modesToFetch).eq('house', house).order('created_at', { ascending: false }).limit(20),
+    const [allGamesRes, historyRes] = await Promise.all([
       supabase.from('games').select('*').in('mode', modesToFetch).eq('house', house).order('created_at', { ascending: false }),
       supabase.from('elo_history').select('*').in('mode', modesToFetch).order('created_at', { ascending: true }),
     ]);
-    if (gamesRes.data) setGames(gamesRes.data);
     if (allGamesRes.data) setAllGames(allGamesRes.data);
     if (historyRes.data) setEloHistory(historyRes.data);
   }
@@ -188,7 +184,7 @@ export default function App() {
   useEffect(() => {
     const channel = supabase
       .channel('games-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'games' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => {
         if (currentMode) fetchGameData(currentMode);
         fetchPlayers();
       })
@@ -352,7 +348,7 @@ export default function App() {
             />
             <EloChart eloHistory={eloHistory} players={players} mode={currentMode} />
             <HeadToHead games={allGames} players={displayPlayers} />
-            <GameHistory games={games} players={players} onUndo={adminUnlocked ? handleUndoGame : null} />
+            <GameHistory games={allGames} players={players} onUndo={adminUnlocked ? handleUndoGame : null} />
           </>
         )}
       </main>
