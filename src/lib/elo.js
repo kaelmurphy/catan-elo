@@ -19,13 +19,17 @@ function avgK(players) {
 }
 
 function applyPairwise(changes, higherTeam, lowerTeam, expected) {
-  const gain = Math.round(avgK(higherTeam.players) * (1 - expected));
-  const loss = Math.round(avgK(lowerTeam.players) * (1 - expected));
+  // Shared K per pairing keeps every exchange zero-sum: whatever the winner
+  // gains, the loser loses. Using each side's own K independently would let
+  // provisional (high-K) players inflate or drain the pool when matched
+  // against established (low-K) ones.
+  const matchK = (avgK(higherTeam.players) + avgK(lowerTeam.players)) / 2;
+  const delta = Math.round(matchK * (1 - expected));
   higherTeam.players.forEach(p => {
-    changes[p.id] += Math.round(gain / higherTeam.players.length);
+    changes[p.id] += Math.round(delta / higherTeam.players.length);
   });
   lowerTeam.players.forEach(p => {
-    changes[p.id] -= Math.round(loss / lowerTeam.players.length);
+    changes[p.id] -= Math.round(delta / lowerTeam.players.length);
   });
 }
 

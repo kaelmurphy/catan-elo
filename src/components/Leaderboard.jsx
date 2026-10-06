@@ -1,3 +1,5 @@
+const PROVISIONAL_GAMES = 5; // matches the K=64 provisional stage in lib/elo.js
+
 export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onEditPlayer, renderRecord, streaks }) {
   const sorted = [...players].sort((a, b) => b[eloKey] - a[eloKey]);
 
@@ -28,6 +30,14 @@ export default function Leaderboard({ players, eloKey, winsKey, gamesKey, onEdit
                   <td className="py-2.5 text-slate-400 text-xs">{i + 1}</td>
                   <td className="py-2.5 font-medium text-slate-800">
                     {player.name}
+                    {player[gamesKey] < PROVISIONAL_GAMES && (
+                      <span
+                        title={`Rating is still settling (${player[gamesKey]} of ${PROVISIONAL_GAMES} games)`}
+                        className="ml-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full"
+                      >
+                        Provisional
+                      </span>
+                    )}
                     {streaks && streaks[player.id] >= 2 && (
                       <span className="ml-1.5 text-xs font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">
                         {streaks[player.id]}W
